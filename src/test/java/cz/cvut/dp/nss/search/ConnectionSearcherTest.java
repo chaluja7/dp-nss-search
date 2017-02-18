@@ -1,6 +1,5 @@
 package cz.cvut.dp.nss.search;
 
-import cz.cvut.dp.nss.search.entity.stopTime.StopTimeNode;
 import cz.cvut.dp.nss.search.utils.DateTimeUtils;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
@@ -33,53 +32,21 @@ public class ConnectionSearcherTest {
         db.execute("CALL cz.cvut.dp.nss.search.initCalendarDates()");
 
         DateTimeFormatter formatter = DateTimeFormat.forPattern(DateTimeUtils.DATE_TIME_PATTERN);
-        DateTime departureDateTime = formatter.parseDateTime("01.02.2017 18:54");
-        DateTime maxDepartureDateTime = formatter.parseDateTime("01.02.2017 21:54");
+        DateTime departureDateTime = formatter.parseDateTime("02.02.2017 9:00");
+        DateTime maxDepartureDateTime = formatter.parseDateTime("02.02.2017 11:00");
 
         long departureMillis = departureDateTime.getMillis();
         long maxDepartureMillis = maxDepartureDateTime.getMillis();
 
-        Result result = db.execute("CALL cz.cvut.dp.nss.search.byDepartureSearch('Dejvická', 'Nové Butovice', " + departureMillis + ", " + maxDepartureMillis + ", 1)");
+        Result result = db.execute("CALL cz.cvut.dp.nss.search.byDepartureSearch('Dejvická', 'Nemocnice Motol', " + departureMillis + ", " + maxDepartureMillis + ", 1)");
 
         List<Map<String, Object>> list = new ArrayList<>();
-        int i = 0;
-
-
         while(result.hasNext()) {
-            Map<String, Object> next = result.next();
-            list.add(next);
-
-            List<Long> stops = (List<Long>) next.get("stops");
-            List<String> actualStops = new ArrayList<>();
-            db.beginTx();
-            for(Long stopTimeId : stops) {
-                actualStops.add((String) db.findNode(StopTimeNode.NODE_LABEL, "stopTimeId", stopTimeId).getProperty("stopName"));
-            }
-
-            next.put("actualStops", actualStops);
-            i++;
+            list.add(result.next());
         }
 
 
         int k = 0;
-
-
-//        // In a try-block, to make sure we close the driver after the test
-//        try(Driver driver = GraphDatabase.driver(neo4j.boltURI() , Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig()))
-//        {
-//            // Given I've started Neo4j with the FullTextIndex procedure class
-//            //       which my 'neo4j' rule above does.
-//            Session session = driver.session();
-//
-//            // Then I can search for that node with lucene query syntax
-//            StatementResult result = session.run( "CALL cz.cvut.dp.nss.search.byDepartureSearch('BrownA_T01')" );
-//
-//
-//            while(result.hasNext()) {
-//                Record next = result.next();
-//                int i = 0;
-//            }
-//        }
     }
 
     @Test

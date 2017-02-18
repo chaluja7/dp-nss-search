@@ -68,9 +68,9 @@ public class ConnectionSearcher {
             final long currentNodeDeparture = (long) next.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
 
             //musim prejit na tripNode a z nej vzit calendarId
-            Relationship singleRelationship = next.getSingleRelationship(StopTimeNode.REL_IN_TRIP, Direction.OUTGOING);
-            Node tripNode = singleRelationship.getEndNode();
-            String calendarId = (String) tripNode.getProperty(TripNode.CALENDAR_ID_PROPERTY);
+            final Relationship inTripRelationship = next.getSingleRelationship(StopTimeNode.REL_IN_TRIP, Direction.OUTGOING);
+            final Node tripNode = inTripRelationship.getEndNode();
+            final String calendarId = (String) tripNode.getProperty(TripNode.CALENDAR_ID_PROPERTY);
 
             final LocalDateTime dateTimeToValidate = DateTimeUtils.getDateTimeToValidate(departureDateTime, overMidnightDepartureInTrip, currentNodeDeparture, departureSecondsOfDay);
             if(DateTimeUtils.dateIsInCalendarValidity(calendarNodeMapReference.get(calendarId), dateTimeToValidate)) {
@@ -108,20 +108,28 @@ public class ConnectionSearcher {
             }
 
             //vyberu tripy, po kterych jede cesta
-            List<String> tripsOnPath = new ArrayList<>();
-            List<Long> stopTimesOnPath = new ArrayList<>();
+            final List<String> tripsOnPath = new ArrayList<>();
+            final List<Long> stopTimesOnPath = new ArrayList<>();
+            final List<String> stopTimesOnPathInfo = new ArrayList<>();
             RelationshipType prevRelationshipType = null;
             for(Relationship relationship : path.relationships()) {
-                Node relationshipStartNode = relationship.getStartNode();
-                long nodeStopTimeIdProperty = (long) relationshipStartNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
-                String nodeTripIdProperty = (String) relationshipStartNode.getProperty(StopTimeNode.TRIP_PROPERTY);
+                final Node relationshipStartNode = relationship.getStartNode();
+                final long nodeStopTimeIdProperty = (long) relationshipStartNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
+                final String nodeTripIdProperty = (String) relationshipStartNode.getProperty(StopTimeNode.TRIP_PROPERTY);
+
+                final String nodeStopNameProperty = (String) relationshipStartNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
+                final Long nodeArrivalProperty = (Long) relationshipStartNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY);
+                final Long nodeDepartureProperty = (Long) relationshipStartNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
+
 
                 if(prevRelationshipType != null && prevRelationshipType.equals(StopTimeNode.REL_NEXT_STOP) && relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP)) {
                     stopTimesOnPath.add(nodeStopTimeIdProperty);
+                    stopTimesOnPathInfo.add(getStopTimeInfoTmp(nodeStopNameProperty, nodeTripIdProperty, nodeArrivalProperty, nodeDepartureProperty));
                 }
 
                 if(relationship.isType(StopTimeNode.REL_NEXT_STOP) && !tripsOnPath.contains(nodeTripIdProperty)) {
                     stopTimesOnPath.add(nodeStopTimeIdProperty);
+                    stopTimesOnPathInfo.add(getStopTimeInfoTmp(nodeStopNameProperty, nodeTripIdProperty, nodeArrivalProperty, nodeDepartureProperty));
                     tripsOnPath.add(nodeTripIdProperty);
                 }
 
@@ -133,8 +141,14 @@ public class ConnectionSearcher {
             }
 
             long lastStopTimeId = (long) endNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
+
+            final String endNodeStopNameProperty = (String) endNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
+            final String endNodeTripProperty = (String) endNode.getProperty(StopTimeNode.TRIP_PROPERTY);
+            final Long endNodeArrivalProperty = (Long) endNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY);
+            final Long endNodeDepartureProperty = (Long) endNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
             if(stopTimesOnPath.get(stopTimesOnPath.size() - 1) != lastStopTimeId) {
                 stopTimesOnPath.add(lastStopTimeId);
+                stopTimesOnPathInfo.add(getStopTimeInfoTmp(endNodeStopNameProperty, endNodeTripProperty, endNodeArrivalProperty, endNodeDepartureProperty));
             }
 
             StringBuilder stringBuilder = new StringBuilder();
@@ -153,6 +167,8 @@ public class ConnectionSearcher {
                 wrapper.setTravelTime(travelTime);
                 wrapper.setOverMidnightArrival(overMidnightArrival);
                 wrapper.setStops(stopTimesOnPath);
+                //TODO docasne jen pro debug
+                wrapper.setStopDetails(stopTimesOnPathInfo);
                 wrapper.setNumberOfTransfers(tripsOnPath.size() - 1);
                 ridesMap.put(pathIdentifier, wrapper);
             }
@@ -162,6 +178,22 @@ public class ConnectionSearcher {
         //vysledky vyhledavani dam do listu a vratim. momentalne tam jsou vysledky, ktere dale musi byt vyfiltrovany!
         List<SearchResultWrapper> searchResultWrappers = transformSearchResultWrapperMapToList(ridesMap);
         return searchResultWrappers.stream();
+    }
+
+    private static String getStopTimeInfoTmp(String stopName, String tripId, Long arrival, Long departure) {
+        arrival = arrival != null ? arrival * 1000 : 0L;
+        departure = departure != null ? departure * 1000 : 0L;
+
+
+        LocalDateTime arrivalDateTime = new LocalDateTime().withMillisOfDay(arrival.intValue());
+        LocalDateTime departureDateTime = new LocalDateTime().withMillisOfDay(departure.intValue());
+
+
+        StringBuilder builder = new StringBuilder();
+        builder.append("Stanice: ").append(stopName).append("; trip ID: ").append(tripId);
+        builder.append(" Příjezd: ").append(arrivalDateTime).append("; Odjezd: ").append(departureDateTime);
+
+        return builder.toString();
     }
 
     @Procedure(name = "cz.cvut.dp.nss.search.initCalendarDates", mode = READ)
@@ -221,10 +253,7 @@ public class ConnectionSearcher {
 
 
         Result result = db.execute(queryString, params);
-        //TODO jo???
-
-        ResourceIterator<Node> s = result.columnAs("s");
-        return s;
+        return result.columnAs("s");
     }
 
     /**

@@ -4,6 +4,7 @@ import java.util.List;
 
 /**
  * Wrapper to wrap search results.
+ * Atributy musi byt public, protoze jinak neo4j nedokaze do nich vlozit hodnoty
  *
  * @author jakubchalupa
  * @since 06.12.14
@@ -21,6 +22,8 @@ public class SearchResultWrapper {
     public long numberOfTransfers;
 
     public List<Long> stops;
+
+    public List<String> stopDetails;
 
     public long getTravelTime() {
         return travelTime;
@@ -70,4 +73,11 @@ public class SearchResultWrapper {
         this.stops = stops;
     }
 
+    public List<String> getStopDetails() {
+        return stopDetails;
+    }
+
+    public void setStopDetails(List<String> stopDetails) {
+        this.stopDetails = stopDetails;
+    }
 }
