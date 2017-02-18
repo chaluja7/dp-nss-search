@@ -1,16 +1,26 @@
 package cz.cvut.dp.nss.search;
 
+import cz.cvut.dp.nss.search.entity.calendar.CalendarNode;
+import cz.cvut.dp.nss.search.entity.calendarDate.CalendarDateNode;
+import cz.cvut.dp.nss.search.entity.stopTime.StopTimeNode;
+import cz.cvut.dp.nss.search.entity.trip.TripNode;
+import cz.cvut.dp.nss.search.utils.DateTimeUtils;
+import cz.cvut.dp.nss.search.utils.traversal.CustomBranchOrderingPolicies;
+import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeEvaluator;
+import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeExpander;
+import cz.cvut.dp.nss.search.utils.traversal.wrapper.StopTripWrapper;
+import org.joda.time.LocalDateTime;
 import org.neo4j.graphdb.*;
-import org.neo4j.graphdb.traversal.Evaluators;
+import org.neo4j.graphdb.traversal.InitialBranchState;
 import org.neo4j.graphdb.traversal.TraversalDescription;
 import org.neo4j.graphdb.traversal.Traverser;
+import org.neo4j.graphdb.traversal.Uniqueness;
 import org.neo4j.logging.Log;
 import org.neo4j.procedure.Context;
 import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static org.neo4j.procedure.Mode.READ;
@@ -31,40 +41,249 @@ public class ConnectionSearcher {
     @Context
     public Log log;
 
+    /**
+     * mapa se dny plastnosti (calendarId -> calendarNode i se dny vyjimek)
+     */
+    private static final Map<String, CalendarNode> calendarNodeMap = Collections.synchronizedMap(new HashMap<>());
+
     @Procedure(name = "cz.cvut.dp.nss.search.byDepartureSearch", mode = READ)
-    public Stream<SearchHit> byDepartureSearch(@Name("tripId") String tripId) {
+    public Stream<SearchResultWrapper> byDepartureSearch(@Name("stopFromName") String stopFromName, @Name("stopToName") String stopToName,
+                                               @Name("departure") long departure, @Name("maxDeparture") long maxDeparture,
+                                               @Name("maxTransfers") long maxTransfers) {
 
-        Node node = db.findNode(Label.label("TripNode"), "tripId", tripId);
+        //TODO mapa by asi mela vzniknout kopii, protoze takto predavam porad tu synchronizovanou coz je na #$@
+        final Map<String, CalendarNode> calendarNodeMapReference = Collections.unmodifiableMap(calendarNodeMap);
+        final LocalDateTime departureDateTime = new LocalDateTime(departure);
+        final int departureSecondsOfDay = departureDateTime.getMillisOfDay() / 1000;
 
-        TraversalDescription td = db.traversalDescription()
-            .breadthFirst()
-            .relationships(RelationshipType.withName("IN_TRIP"), Direction.INCOMING)
-            .evaluator(Evaluators.includeWhereLastRelationshipTypeIs(RelationshipType.withName("IN_TRIP")));
+        //najdu uzly ze kterych muzu vyrazit a jeste je zkontroluji na platnost calendar
+        //vyhovujici pridavam do listu nodeList
+        ResourceIterator<Node> startNodes = findStartNodesForDepartureTypePathFinding(stopFromName, departure, maxDeparture);
+        final List<Node> nodeList = new ArrayList<>();
+        while(startNodes.hasNext()) {
+            Node next = startNodes.next();
 
+            boolean overMidnightDepartureInTrip = (boolean) next.getProperty(StopTimeNode.OVER_MIDNIGHT_PROPERTY);
+            //uzly zde urcite maji departure, protoze tak jsem je vyselectovat pomoci cypheru
+            final long currentNodeDeparture = (long) next.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
 
-        List<SearchHit> list = new ArrayList<>();
-        if(node != null) {
-            Traverser traverser = td.traverse(node);
-            for (Path path : traverser) {
-                list.add(new SearchHit(path.startNode(), path.endNode()));
+            //musim prejit na tripNode a z nej vzit calendarId
+            Relationship singleRelationship = next.getSingleRelationship(StopTimeNode.REL_IN_TRIP, Direction.OUTGOING);
+            Node tripNode = singleRelationship.getEndNode();
+            String calendarId = (String) tripNode.getProperty(TripNode.CALENDAR_ID_PROPERTY);
+
+            final LocalDateTime dateTimeToValidate = DateTimeUtils.getDateTimeToValidate(departureDateTime, overMidnightDepartureInTrip, currentNodeDeparture, departureSecondsOfDay);
+            if(DateTimeUtils.dateIsInCalendarValidity(calendarNodeMapReference.get(calendarId), dateTimeToValidate)) {
+                nodeList.add(next);
             }
         }
 
-        return list.stream();
-    }
+        //predpis vyhledavani cest
+        TraversalDescription traversalDescription = db.traversalDescription()
+            .order(CustomBranchOrderingPolicies.DEPARTURE_ORDERING)
+            .uniqueness(Uniqueness.NODE_PATH)
+            .expand(new DepartureTypeExpander(departureDateTime, new LocalDateTime(maxDeparture),
+                (int) maxTransfers, calendarNodeMapReference), getEmptyInitialBranchState())
+            .evaluator(new DepartureTypeEvaluator(stopToName, departureDateTime, 3));
 
-    public static class SearchHit {
+        Map<String, SearchResultWrapper> ridesMap = new HashMap<>();
+        int secondsOfDepartureDay = departureDateTime.getMillisOfDay() / 1000;
+        Traverser traverser = traversalDescription.traverse(nodeList);
+        for(Path path : traverser) {
+            Node startNode = path.startNode();
+            Node endNode = path.endNode();
 
-        public long startNodeId;
+            long secondsOfArrival = ((long) endNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY));
+            long secondsOfDeparture = ((long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY));
+            long travelTime;
+            if(secondsOfArrival >= secondsOfDeparture) {
+                travelTime = secondsOfArrival - secondsOfDeparture;
+            } else {
+                travelTime = (DateTimeUtils.SECONDS_IN_DAY - secondsOfDeparture) + secondsOfArrival;
+            }
 
-        public long endNodeId;
+            boolean overMidnightArrival = false;
+            if(secondsOfArrival < secondsOfDepartureDay) {
+                overMidnightArrival = true;
+            }
 
-        SearchHit(Node startNode, Node endNode) {
-            this.startNodeId = startNode.getId();
-            this.endNodeId = endNode.getId();
+            //vyberu tripy, po kterych jede cesta
+            List<String> tripsOnPath = new ArrayList<>();
+            List<Long> stopTimesOnPath = new ArrayList<>();
+            RelationshipType prevRelationshipType = null;
+            for(Relationship relationship : path.relationships()) {
+                Node relationshipStartNode = relationship.getStartNode();
+                long nodeStopTimeIdProperty = (long) relationshipStartNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
+                String nodeTripIdProperty = (String) relationshipStartNode.getProperty(StopTimeNode.TRIP_PROPERTY);
+
+                if(prevRelationshipType != null && prevRelationshipType.equals(StopTimeNode.REL_NEXT_STOP) && relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP)) {
+                    stopTimesOnPath.add(nodeStopTimeIdProperty);
+                }
+
+                if(relationship.isType(StopTimeNode.REL_NEXT_STOP) && !tripsOnPath.contains(nodeTripIdProperty)) {
+                    stopTimesOnPath.add(nodeStopTimeIdProperty);
+                    tripsOnPath.add(nodeTripIdProperty);
+                }
+
+                if(relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP)) {
+                    prevRelationshipType = StopTimeNode.REL_NEXT_AWAITING_STOP;
+                } else {
+                    prevRelationshipType = StopTimeNode.REL_NEXT_STOP;
+                }
+            }
+
+            long lastStopTimeId = (long) endNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
+            if(stopTimesOnPath.get(stopTimesOnPath.size() - 1) != lastStopTimeId) {
+                stopTimesOnPath.add(lastStopTimeId);
+            }
+
+            StringBuilder stringBuilder = new StringBuilder();
+            for(String tripId : tripsOnPath) {
+                if(stringBuilder.length() != 0) {
+                    stringBuilder.append("-");
+                }
+                stringBuilder.append(tripId);
+            }
+
+            String pathIdentifier = stringBuilder.toString();
+            if(!ridesMap.containsKey(pathIdentifier) || travelTime < ridesMap.get(pathIdentifier).getTravelTime()) {
+                SearchResultWrapper wrapper = new SearchResultWrapper();
+                wrapper.setDeparture(secondsOfDeparture);
+                wrapper.setArrival(secondsOfArrival);
+                wrapper.setTravelTime(travelTime);
+                wrapper.setOverMidnightArrival(overMidnightArrival);
+                wrapper.setStops(stopTimesOnPath);
+                wrapper.setNumberOfTransfers(tripsOnPath.size() - 1);
+                ridesMap.put(pathIdentifier, wrapper);
+            }
+
         }
 
+        //vysledky vyhledavani dam do listu a vratim. momentalne tam jsou vysledky, ktere dale musi byt vyfiltrovany!
+        List<SearchResultWrapper> searchResultWrappers = transformSearchResultWrapperMapToList(ridesMap);
+        return searchResultWrappers.stream();
     }
 
+    @Procedure(name = "cz.cvut.dp.nss.search.initCalendarDates", mode = READ)
+    public void initCalendarDates() {
+        Map<String, CalendarNode> map = new HashMap<>();
+        ResourceIterator<Node> calendarNodes = db.findNodes(CalendarNode.NODE_LABEL);
+        while(calendarNodes.hasNext()) {
+            Node calendarNode = calendarNodes.next();
+            CalendarNode realCalendarNode = getCalendarNodeFromNode(calendarNode);
+
+            Iterable<Relationship> relationships = calendarNode.getRelationships(CalendarNode.REL_IN_CALENDAR, Direction.INCOMING);
+            Set<CalendarDateNode> calendarDateNodes = new HashSet<>();
+            for(Relationship relationship : relationships) {
+                calendarDateNodes.add(getCalendarDateNodeFromNode(relationship.getStartNode()));
+            }
+            realCalendarNode.setCalendarDateNodes(calendarDateNodes);
+
+            //realCalendarNode.setCalendarDateNodes();
+            map.put(realCalendarNode.getCalendarId(), realCalendarNode);
+        }
+
+        synchronized(calendarNodeMap) {
+            calendarNodeMap.clear();
+            calendarNodeMap.putAll(map);
+        }
+    }
+
+    /**
+     * najde vychozi stopy pro traverzovani (hledani dle departureInMillis), ale bez osetreni na platnost calendar!
+     * @param stopFromName id vychozi stanice
+     * @param departureInMillis datum odjezdu
+     * @param maxDateDepartureInMillis max datum odjezdu
+     * @return vychozi zastaveni (serazena)
+     */
+    protected ResourceIterator<Node> findStartNodesForDepartureTypePathFinding(String stopFromName, long departureInMillis, long maxDateDepartureInMillis) {
+        LocalDateTime tempDateDeparture = new LocalDateTime(departureInMillis);
+        LocalDateTime tempMaxDateDeparture = new LocalDateTime(maxDateDepartureInMillis);
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("stopFromName", stopFromName);
+        params.put("departureTimeInSeconds", tempDateDeparture.getMillisOfDay() / 1000);
+        params.put("maxDepartureTimeInSeconds", tempMaxDateDeparture.getMillisOfDay() / 1000);
+
+        String queryString = "match (s:StopTimeNode {stopName: {stopFromName}})-[IN_TRIP]->(t:TripNode) where s.departureInSeconds is not null ";
+        if(tempMaxDateDeparture.getMillisOfDay() > tempDateDeparture.getMillisOfDay()) {
+            //neprehoupl jsem se pres pulnoc
+            queryString += "and s.departureInSeconds >= {departureTimeInSeconds} and s.departureInSeconds < {maxDepartureTimeInSeconds} ";
+        } else {
+            //prehoupl jsem se s rozsahem pres pulnoc
+            queryString += "and ((s.departureInSeconds >= {departureTimeInSeconds}) or (s.departureInSeconds < {maxDepartureTimeInSeconds})) ";
+        }
+
+        //pokud pouziju tohle, tak to pak neumi neo4j preves na Node
+//        queryString += "return s {.*, calendarId: t.calendarId} ";
+        queryString += "return s ";
+        queryString += "order by case when s.departureInSeconds < {departureTimeInSeconds} then 2 else 1 end, s.departureInSeconds asc";
+
+
+        Result result = db.execute(queryString, params);
+        //TODO jo???
+
+        ResourceIterator<Node> s = result.columnAs("s");
+        return s;
+    }
+
+    /**
+     * vrati list value hodnot z mapy
+     * @param ridesMap mapa search result wrapperu
+     * @return list search result wrapperu
+     */
+    private List<SearchResultWrapper> transformSearchResultWrapperMapToList(Map<String, SearchResultWrapper> ridesMap) {
+        List<SearchResultWrapper> resultList = new ArrayList<>();
+        for(Map.Entry<String, SearchResultWrapper> entry : ridesMap.entrySet()) {
+            resultList.add(entry.getValue());
+        }
+
+        return resultList;
+    }
+
+    private static CalendarNode getCalendarNodeFromNode(Node node) {
+        CalendarNode calendarNode = new CalendarNode();
+        calendarNode.setCalendarId((String) node.getProperty(CalendarNode.CALENDAR_ID_PROPERTY));
+        calendarNode.setFromDateInSeconds((long) node.getProperty(CalendarNode.FROM_DATE_PROPERTY));
+        calendarNode.setToDateInSeconds((long) node.getProperty(CalendarNode.TO_DATE_PROPERTY));
+        calendarNode.setMonday((boolean) node.getProperty(CalendarNode.MONDAY));
+        calendarNode.setTuesday((boolean) node.getProperty(CalendarNode.TUESDAY));
+        calendarNode.setWednesday((boolean) node.getProperty(CalendarNode.WEDNESDAY));
+        calendarNode.setThursday((boolean) node.getProperty(CalendarNode.THURSDAY));
+        calendarNode.setFriday((boolean) node.getProperty(CalendarNode.FRIDAY));
+        calendarNode.setSaturday((boolean) node.getProperty(CalendarNode.SATURDAY));
+        calendarNode.setSunday((boolean) node.getProperty(CalendarNode.SUNDAY));
+
+        return calendarNode;
+    }
+
+    private static CalendarDateNode getCalendarDateNodeFromNode(Node node) {
+        CalendarDateNode calendarDateNode = new CalendarDateNode();
+        calendarDateNode.setCalendarDateId((long) node.getProperty(CalendarDateNode.CALENDAR_DATE_ID_PROPERTY));
+        calendarDateNode.setDateInSeconds((long) node.getProperty(CalendarDateNode.CALENDAR_DATE_IN_SECONDS_PROPERTY));
+        calendarDateNode.setInclude((boolean) node.getProperty(CalendarDateNode.CALENDAR_DATE_INCLUDE_PROPERTY));
+
+        return calendarDateNode;
+    }
+
+    /**
+     * @return initial branch state for neo4j traversing.
+     */
+    private InitialBranchState<StopTripWrapper> getEmptyInitialBranchState() {
+
+        return new InitialBranchState<StopTripWrapper>() {
+
+            @Override
+            public InitialBranchState<StopTripWrapper> reverse() {
+                return this;
+            }
+
+            @Override
+            public StopTripWrapper initialState(Path path) {
+                return new StopTripWrapper();
+            }
+
+        };
+    }
 
 }
