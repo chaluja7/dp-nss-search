@@ -21,7 +21,7 @@ public final class DepartureTypeEvaluator implements Evaluator {
 
     private final String endStopName;
 
-    private final int departureMillisOfDay;
+    private final int departureSecondsOfDay;
 
     private final int maxNumberOfResults;
 
@@ -40,22 +40,27 @@ public final class DepartureTypeEvaluator implements Evaluator {
      */
     private final Map<Long, Set<String>> foundedPathsDetails = new HashMap<>();
 
+    /**
+     * cas vyjezdu na ceste, na ktere jsem minule nasel cil
+     */
     private Long prevFoundedDeparture = null;
 
     public DepartureTypeEvaluator(String endStopName, LocalDateTime departureDateTime, int maxNumberOfResults) {
         this.endStopName = endStopName;
-        this.departureMillisOfDay = departureDateTime.getMillisOfDay();
+        this.departureSecondsOfDay = departureDateTime.getMillisOfDay() / 1000;
         this.maxNumberOfResults = maxNumberOfResults;
     }
 
     @Override
     public Evaluation evaluate(Path path) {
-        Node startNode = path.startNode();
-        long startNodeStopTimeId = (long) startNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
-        long startNodeDeparture = (long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
+        //informace z prvniho uzlu cesty (vychozi stanice)
+        final Node startNode = path.startNode();
+        final long startNodeStopTimeId = (long) startNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
+        final long startNodeDeparture = (long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
 
-        Node currentNode = path.endNode();
-        String currentNodeStopName = (String) currentNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
+        //informace o aktualnim uzlu cesty
+        final Node currentNode = path.endNode();
+        final String currentNodeStopName = (String) currentNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
 
         //rozhodujici je arrival time pokud existuje, jinak departure time
         Long currentNodeArrival = null;
@@ -71,26 +76,29 @@ public final class DepartureTypeEvaluator implements Evaluator {
             throw new RuntimeException("node must have departure or arrival time");
         }
 
-        Long currentNodeTimeProperty = currentNodeArrival != null ? currentNodeArrival : currentNodeDeparture;
+        final long currentNodeTimeProperty = currentNodeArrival != null ? currentNodeArrival : currentNodeDeparture;
 
         //POKUD jsem jiz na teto ceste (od start node) nasel cil v lepsim case
         if(foundedPaths.containsKey(startNodeStopTimeId)) {
-            Long prevBestFoundedPathStart = foundedPaths.get(startNodeStopTimeId);
-            long currentNodeMillisTimeWithPenalty = currentNodeTimeProperty + (DateTimeUtils.TRANSFER_PENALTY_SECONDS * foundedPathsNumOfTransfers.get(startNodeStopTimeId));
-            if(currentNodeMillisTimeWithPenalty >= DateTimeUtils.SECONDS_IN_DAY) {
+            //vytahnu si cas, v jakem jsem jiz nasel cil kde start byl startNodeStopTimeId
+            final long prevBestFoundedPathStart = foundedPaths.get(startNodeStopTimeId);
+            //a cas aktualniho uzlu pro porovnani, pokud uz bych byl s casem dal, nez v jakem case jsem jiz od
+            //tohoto startu nasel cil, tak nema cenu dale traverzovat, protoze cil urcite jiz v lepsim case nenajdu
+            long currentNodeTimeWithPenalty = currentNodeTimeProperty + (DateTimeUtils.TRANSFER_PENALTY_SECONDS * foundedPathsNumOfTransfers.get(startNodeStopTimeId));
+            if(currentNodeTimeWithPenalty >= DateTimeUtils.SECONDS_IN_DAY) {
                 //prehoupl jsem se s penalizaci do dalsiho dne
-                currentNodeMillisTimeWithPenalty = currentNodeMillisTimeWithPenalty - DateTimeUtils.SECONDS_IN_DAY;
+                currentNodeTimeWithPenalty = currentNodeTimeWithPenalty - DateTimeUtils.SECONDS_IN_DAY;
             }
 
-            if(prevBestFoundedPathStart >= departureMillisOfDay) {
+            if(prevBestFoundedPathStart >= departureSecondsOfDay) {
                 //minuly nejlepsi cil byl pred pulnoci
-                if((currentNodeMillisTimeWithPenalty > prevBestFoundedPathStart && currentNodeMillisTimeWithPenalty >= departureMillisOfDay) || currentNodeMillisTimeWithPenalty < departureMillisOfDay) {
+                if((currentNodeTimeWithPenalty > prevBestFoundedPathStart && currentNodeTimeWithPenalty >= departureSecondsOfDay) || currentNodeTimeWithPenalty < departureSecondsOfDay) {
                     //momentalne jsem taky pred pulnoci ale v horsim case nebo jsem az po pulnoci
                     return Evaluation.EXCLUDE_AND_PRUNE;
                 }
             } else {
                 //minuly nejlepsi cil byl po pulnoci
-                if(currentNodeMillisTimeWithPenalty > prevBestFoundedPathStart && currentNodeMillisTimeWithPenalty < departureMillisOfDay) {
+                if(currentNodeTimeWithPenalty > prevBestFoundedPathStart && currentNodeTimeWithPenalty < departureSecondsOfDay) {
                     //momentalne jsem taky po pulnoci ale s horsim casem
                     return Evaluation.EXCLUDE_AND_PRUNE;
                 }
@@ -99,6 +107,7 @@ public final class DepartureTypeEvaluator implements Evaluator {
 
         //vyhledavam na ceste, kde departureTime (vychoziho uzlu) je mensi, nez departure time nektere jiz nalezene cesty
         //to muzu hned ukoncit, protoze takovy vysledek stejne uzivateli nezobrazim
+        //nalezl bych pak totiz jedine vysledek, ktery vyjizdi drive a prijizdi pozdeji, nez nektera jiz nalezena cesta
         if(prevFoundedDeparture != null && startNodeDeparture < prevFoundedDeparture) {
             return Evaluation.EXCLUDE_AND_PRUNE;
         }
@@ -110,42 +119,57 @@ public final class DepartureTypeEvaluator implements Evaluator {
 
         //nasel jsem
         if(currentNodeStopName.equals(endStopName)) {
-            Set<String> tmpTrips = new HashSet<>();
+            //do setu si ulozim vsechny jiz navstivene tripy po teto ceste
+            final Set<String> tmpTrips = new HashSet<>();
+            String tmpTrip;
             for(Node n : path.nodes()) {
-                tmpTrips.add((String) n.getProperty(StopTimeNode.TRIP_PROPERTY));
+                tmpTrip = (String) n.getProperty(StopTimeNode.TRIP_PROPERTY);
+                if(!tmpTrips.contains(tmpTrip)) {
+                    tmpTrips.add(tmpTrip);
+                }
             }
 
-            long currentNodeMillisTimeWithPenalty = currentNodeTimeProperty + (DateTimeUtils.TRANSFER_PENALTY_SECONDS * tmpTrips.size() - 1);
-            if(currentNodeMillisTimeWithPenalty >= DateTimeUtils.SECONDS_IN_DAY) {
+            //zjistim cas aktualniho uzlu i s penalizaci za prestup
+            long currentNodeTimeWithPenalty = currentNodeTimeProperty + (DateTimeUtils.TRANSFER_PENALTY_SECONDS * (tmpTrips.size() - 1));
+            if(currentNodeTimeWithPenalty >= DateTimeUtils.SECONDS_IN_DAY) {
                 //prehoupl jsem se s penalizaci do dalsiho dne
-                currentNodeMillisTimeWithPenalty = currentNodeMillisTimeWithPenalty - DateTimeUtils.SECONDS_IN_DAY;
+                currentNodeTimeWithPenalty = currentNodeTimeWithPenalty - DateTimeUtils.SECONDS_IN_DAY;
             }
 
             boolean saveMe = true;
-            List<Long> keysToRemove = new ArrayList<>();
+            final List<Long> keysToRemove = new ArrayList<>();
             for(Map.Entry<Long, Set<String>> entry : foundedPathsDetails.entrySet()) {
-                Long key = entry.getKey();
-                Set<String> value = entry.getValue();
+                final long stopTimeId = entry.getKey();
+                final Set<String> visitedTrips = entry.getValue();
 
-                if(!Sets.intersection(tmpTrips, value).isEmpty()) {
-                    Long pathArrival = foundedPaths.get(key);
-                    if(pathArrival >= departureMillisOfDay) {
-                        //cil aktualni cesty byl pred pulnoci
-                        if((currentNodeMillisTimeWithPenalty >= departureMillisOfDay && currentNodeMillisTimeWithPenalty > pathArrival) || currentNodeMillisTimeWithPenalty < departureMillisOfDay) {
+                //TODO jakubchalupa - zde postupne mazu jiz nalezene cesty, ktere maji nejaky spolecny trip s aktualne nalezenou
+                //TODO nebo naopak. Nemuze teoreticky nastat, ze smazu skoro vsechny a zustane jen jedna?
+                //na aktualne nalezene ceste jsem jel alespon jednim stejnym tripem, jako na jiz drive nalezene ceste do cile
+                //musim se tedy rozhodnout, zda je lepsi ta jiz drive nalezena cesta, nebo ta aktualni, protoze nechci mit obe
+                if(!Sets.intersection(tmpTrips, visitedTrips).isEmpty()) {
+                    //vytahnu si cas prijezdu na jit drive nalezene ceste
+                    final long pathArrival = foundedPaths.get(stopTimeId);
+                    if(pathArrival >= departureSecondsOfDay) {
+                        //cil drive nalezene cesty byl pred pulnoci
+                        if((currentNodeTimeWithPenalty >= departureSecondsOfDay && currentNodeTimeWithPenalty > pathArrival) || currentNodeTimeWithPenalty < departureSecondsOfDay) {
                             //momentalne jsem v cili taky pred pulnoci, ale s horsim casem nez jsem jiz byl, nebo jsem v cili az po pulnoci
+                            //aktualne nalezenou cestu tedy nechci ukladat
                             saveMe = false;
                             break;
                         } else {
-                            keysToRemove.add(key);
+                            //naopak aktualne nalezena cesta je lepsi, nez ta drive nalezene, takze tu starou chci smazat
+                            keysToRemove.add(stopTimeId);
                         }
                     } else {
                         //cil aktualni cesty byl po pulnoci
-                        if(currentNodeMillisTimeWithPenalty < departureMillisOfDay && currentNodeMillisTimeWithPenalty > pathArrival) {
+                        if(currentNodeTimeWithPenalty < departureSecondsOfDay && currentNodeTimeWithPenalty > pathArrival) {
                             //momentalne jsem taky po pulnoci ale pozdeji
+                            //aktualne nalezenou cestu tedy nechci ukladat
                             saveMe = false;
                             break;
                         } else {
-                            keysToRemove.add(key);
+                            //naopak aktualni cesta je lepsi, takze tu starou mazu
+                            keysToRemove.add(stopTimeId);
                         }
                     }
                 }
@@ -160,7 +184,7 @@ public final class DepartureTypeEvaluator implements Evaluator {
             }
 
             prevFoundedDeparture = startNodeDeparture;
-            foundedPaths.put(startNodeStopTimeId, currentNodeMillisTimeWithPenalty);
+            foundedPaths.put(startNodeStopTimeId, currentNodeTimeWithPenalty);
             foundedPathsNumOfTransfers.put(startNodeStopTimeId, tmpTrips.size() - 1);
             return Evaluation.INCLUDE_AND_PRUNE;
         }

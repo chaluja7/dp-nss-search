@@ -33,10 +33,13 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
 
     private final int maxDepartureSecondsOfDay;
 
+    /**
+     * calendarId -> calendarNode. Je to mapa s calendar pro zjistovani platnosti prochazenych uzlu
+     */
     private final Map<String, CalendarNode> calendarNodeMap;
 
     /**
-     * id stopTime -> nejlepsi cas, ve kterem jsem na nem zatim byl v ramci hledani
+     * id stopTime -> nejlepsi cas (delka cesty od zacatku), ve ktere jsem na nem zatim byl v ramci hledani
      */
     private final Map<Long, Long> visitedStops = new HashMap<>();
 
@@ -53,23 +56,24 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
     }
 
     @Override
-    public Iterable<Relationship> expand(Path path, BranchState<StopTripWrapper> stateBranchState) {
+    public Iterable<Relationship> expand(Path path, BranchState<StopTripWrapper> branchState) {
 
         //Predavani parametru PATH, pokazde musim vytvorit nove instance, aby se jednotlive path neovlivnovali
-        StopTripWrapper stopTripWrapperOld = stateBranchState.getState();
+        final StopTripWrapper stopTripWrapperOld = branchState.getState();
         //jmeno stanice -> id tripu, na kterych jsem jiz stanici navstivil
-        Map<String, List<String>> visitedStops = CollectionCloneUtils.cloneMap(stopTripWrapperOld.getVisitedStops());
+        final Map<String, List<String>> visitedStops = CollectionCloneUtils.cloneMap(stopTripWrapperOld.getVisitedStops());
         //id tripu, ktere jsem jiz navstivil
-        Set<String> visitedTrips = CollectionCloneUtils.cloneSet(stopTripWrapperOld.getVisitedTrips());
+        final Set<String> visitedTrips = CollectionCloneUtils.cloneSet(stopTripWrapperOld.getVisitedTrips());
 
-        StopTripWrapper stopTripWrapper = new StopTripWrapper();
+        //vytvoreni nove instance stopTripWrapperu
+        final StopTripWrapper stopTripWrapper = new StopTripWrapper();
         stopTripWrapper.setVisitedStops(visitedStops);
         stopTripWrapper.setVisitedTrips(visitedTrips);
-        stateBranchState.setState(stopTripWrapper);
+        branchState.setState(stopTripWrapper);
 
         //inicializace parametru PATH
-        Node startNode = path.startNode();
-        Node currentNode = path.endNode();
+        final Node startNode = path.startNode();
+        final Node currentNode = path.endNode();
         final String startNodeStopName = (String) startNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
         final long startNodeDeparture = (long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
         final long currentNodeStopTimeId = (long) currentNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
@@ -93,8 +97,8 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             throw new RuntimeException();
         }
 
-        Long currentNodeTimeProperty = currentNodeDeparture != null ? currentNodeDeparture : currentNodeArrival;
-        Long inverseCurrentNodeTimeProperty = currentNodeArrival != null ? currentNodeArrival : currentNodeDeparture;
+        final long currentNodeTimeProperty = currentNodeDeparture != null ? currentNodeDeparture : currentNodeArrival;
+        final long inverseCurrentNodeTimeProperty = currentNodeArrival != null ? currentNodeArrival : currentNodeDeparture;
 
         //spocitani aktualniho travel time - od zacatku cesty do nynejsiho uzlu
         long travelTime;
@@ -105,35 +109,38 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             //prehoupl jsem se pres pulnoc
             travelTime = DateTimeUtils.SECONDS_IN_DAY - startNodeDeparture + inverseCurrentNodeTimeProperty;
         }
+        //cas cesty s penalizacemi za prestup
         final long travelTimeWithPenalty = travelTime + (visitedTrips.size() * DateTimeUtils.TRANSFER_PENALTY_SECONDS);
 
         //Jsem na prvnim NODu
         if(lastRelationShip == null) {
-            List<String> tmpVisitedTrips = new ArrayList<>();
+            final List<String> tmpVisitedTrips = new ArrayList<>();
             tmpVisitedTrips.add(currentTripId);
 
+            //a do path parametru pridam potrebne info (navstiveny trip a stanice)
             visitedStops.put(currentStopName, tmpVisitedTrips);
             visitedTrips.add(currentTripId);
             this.visitedStops.put(currentNodeStopTimeId, travelTimeWithPenalty);
 
-            //vratit chci z prvniho nodu jen node na NEXT_STOP relaci
+            //vratit chci z prvniho nodu jen node na NEXT_STOP relaci (z prvniho uzlu nechci prestupovat)
             return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_STOP);
         }
 
-        //pokud jsem se dostal zpet do startovni stanice
+        //pokud jsem se dostal zpet do startovni stanice tak je smycka, coz nechci
         if(currentStopName.equals(startNodeStopName)) {
             return Iterables.empty();
         }
 
+        //TODO pozor, zde maxDeparture znasilnuji k ucelu, ke kteremu neslouzi! maxDeparture by melo znacit maxialni cas
+        //TODO pouze prvniho uzlu, ne jakehokoliv po ceste
         //musim zkonrolovat, zda aktualni node nema time jiz po case maxDepartureTime
         if(departureDayOfYear == maxDepartureDayOfYear) {
             //pohybuji se v ramci jednoho dne
-            if(currentNodeTimeProperty < departureSecondsOfDay || currentNodeTimeProperty >= maxDepartureSecondsOfDay) {
-                //presahl jsem casovy rozsah vyhledavani
+            if(currentNodeTimeProperty < departureSecondsOfDay || currentNodeTimeProperty > maxDepartureSecondsOfDay) {
+                //presahl jsem casovy rozsah vyhledavani (prehoupl jsem se pres pulnoc, ackoliv jsem nemel nebo jsem presahl maxDeparture)
                 return Iterables.empty();
             }
         } else if((departureDayOfYear == maxDepartureDayOfYear - 1) || (maxDepartureDayOfYear == 1 && (departureDayOfYear == 365 || departureDayOfYear == 366))) {
-            //TODO opravdu je ten prechod pres rok ok? tedy je rozsah 1 - 365/366?
             //prehoupl jsem se pres pulnoc, vyresil jsem i prechod pres pulnoc mezi roky
             if(currentNodeTimeProperty < departureSecondsOfDay && currentNodeTimeProperty > maxDepartureSecondsOfDay) {
                 //presahl jsem casovy rozsah vyhledavani
@@ -168,6 +175,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
                 List<String> tripsWithThisStation = visitedStops.get(currentStopName);
                 for(String tripId : tripsWithThisStation) {
                     if(!tripId.equals(currentTripId)) {
+                        //na teto stanici jsem byl jiz na jinem tripu, nez aktualnim
                         return Iterables.empty();
                     }
                 }

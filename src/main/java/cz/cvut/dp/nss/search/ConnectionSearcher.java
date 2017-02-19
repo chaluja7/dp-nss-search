@@ -51,6 +51,8 @@ public class ConnectionSearcher {
                                                @Name("departure") long departure, @Name("maxDeparture") long maxDeparture,
                                                @Name("maxTransfers") long maxTransfers) {
 
+        //TODO neuvazuje minimalni cas na prestup (asi expander!)
+
         //TODO mapa by asi mela vzniknout kopii, protoze takto predavam porad tu synchronizovanou coz je na #$@
         final Map<String, CalendarNode> calendarNodeMapReference = Collections.unmodifiableMap(calendarNodeMap);
         final LocalDateTime departureDateTime = new LocalDateTime(departure);

@@ -42,7 +42,9 @@ public class DepartureBranchSelector implements BranchSelector {
                 Node startNode = next.startNode();
                 Node endNode = next.endNode();
 
+                //cas vyjezdu na teto ceste
                 long departureTime = (long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
+                //currentTime je arrival, pokud existuje, jinak departure. jde o koncovy uzel na aktualni ceste
                 long currentTime;
                 if(endNode.hasProperty(StopTimeNode.ARRIVAL_PROPERTY)) {
                     currentTime = (long) endNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY);
@@ -50,11 +52,12 @@ public class DepartureBranchSelector implements BranchSelector {
                     currentTime = (long) endNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
                 }
 
-                //zjisti cas uplne prvniho zpracovavaneho uzlu
+                //zjisti cas uplne prvniho zpracovavaneho uzlu (v ramci vsech cest, nejen teto)
                 if(globalFirstNodeDeparture == null) {
                     globalFirstNodeDeparture = departureTime;
                 }
 
+                //zjistim, zda jsem se prehoupl pres pulnoc od uplne prvniho zpracovavaneho uzlu
                 boolean overMidnight;
                 if(globalFirstNodeDeparture <= currentTime) {
                     overMidnight = false;
@@ -62,6 +65,7 @@ public class DepartureBranchSelector implements BranchSelector {
                     overMidnight = true;
                 }
 
+                //zjistim delku aktualni cesty (start-end) ve vterinach
                 long travelTime;
                 if(departureTime <= currentTime) {
                     travelTime = currentTime - departureTime;
@@ -69,15 +73,17 @@ public class DepartureBranchSelector implements BranchSelector {
                     travelTime = DateTimeUtils.SECONDS_IN_DAY - departureTime + currentTime;
                 }
 
+                //zjistim pocet prestupu na aktualni ceste, k tomu musim projit vsechny hrany mezi start a end a hledat prestupni
                 int numOfTransfers = 0;
                 RelationshipType prevRelationShipType = null;
                 for(Relationship relationship : next.reverseRelationships()) {
                     boolean relationshipIsTypeNextAwaitingStop = relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP);
-                    //sel jsem (N)-[NEXT_AWAITING_STOP]-(m)-[NEXT_STOP]-(o)
+                    //sel jsem (N)-[NEXT_AWAITING_STOP]-(m)-[NEXT_STOP]-(o); tzn prestoupil jsem na jiny trip
                     if(prevRelationShipType != null && relationshipIsTypeNextAwaitingStop && prevRelationShipType.equals(StopTimeNode.REL_NEXT_STOP)) {
                         numOfTransfers++;
                     }
 
+                    //a do dalsi iterace si urcim prevRelatinshipType, coz je ten aktualni
                     if(relationshipIsTypeNextAwaitingStop) {
                         prevRelationShipType = StopTimeNode.REL_NEXT_AWAITING_STOP;
                     } else {
@@ -85,11 +91,14 @@ public class DepartureBranchSelector implements BranchSelector {
                     }
                 }
 
+                //celkovy cas jizdy zvysim o penalizace za prestupy
                 travelTime = travelTime + (numOfTransfers * DateTimeUtils.TRANSFER_PENALTY_SECONDS);
 
+                //a do fronty pridam aktualni cestu
                 queue.addPath(next, currentTime, travelTime, overMidnight);
                 result = next;
             } else {
+                //vytahnu dalsi prvek z fronty
                 current = queue.poll();
                 if(current == null) {
                     return null;
