@@ -5,6 +5,8 @@ import cz.cvut.dp.nss.search.entity.calendarDate.CalendarDateNode;
 import cz.cvut.dp.nss.search.entity.stopTime.StopTimeNode;
 import cz.cvut.dp.nss.search.entity.trip.TripNode;
 import cz.cvut.dp.nss.search.utils.DateTimeUtils;
+import cz.cvut.dp.nss.search.utils.comparator.SearchResultByDepartureDateComparator;
+import cz.cvut.dp.nss.search.utils.filter.SearchResultFilter;
 import cz.cvut.dp.nss.search.utils.traversal.CustomBranchOrderingPolicies;
 import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeEvaluator;
 import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeExpander;
@@ -43,8 +45,14 @@ public class ConnectionSearcher {
 
     /**
      * mapa se dny plastnosti (calendarId -> calendarNode i se dny vyjimek)
+     * schvalne neni synchronized, zapis si sam synchronizuji pouze v initCalendarDates() a cteni preziji bez synchronized
      */
-    private static final Map<String, CalendarNode> calendarNodeMap = Collections.synchronizedMap(new HashMap<>());
+    private static final Map<String, CalendarNode> calendarNodeMap = new HashMap<>();
+
+    /**
+     * max pocet vysledku vyhledavani
+     */
+    private static final int MAX_NUMBER_OF_RESULTS = 3;
 
     @Procedure(name = "cz.cvut.dp.nss.search.byDepartureSearch", mode = READ)
     public Stream<SearchResultWrapper> byDepartureSearch(@Name("stopFromName") String stopFromName, @Name("stopToName") String stopToName,
@@ -54,7 +62,6 @@ public class ConnectionSearcher {
         //TODO neuvazuje minimalni cas na prestup (asi expander!)
 
         //TODO mapa by asi mela vzniknout kopii, protoze takto predavam porad tu synchronizovanou coz je na #$@
-        final Map<String, CalendarNode> calendarNodeMapReference = Collections.unmodifiableMap(calendarNodeMap);
         final LocalDateTime departureDateTime = new LocalDateTime(departure);
         final int departureSecondsOfDay = departureDateTime.getMillisOfDay() / 1000;
 
@@ -75,7 +82,7 @@ public class ConnectionSearcher {
             final String calendarId = (String) tripNode.getProperty(TripNode.CALENDAR_ID_PROPERTY);
 
             final LocalDateTime dateTimeToValidate = DateTimeUtils.getDateTimeToValidate(departureDateTime, overMidnightDepartureInTrip, currentNodeDeparture, departureSecondsOfDay);
-            if(DateTimeUtils.dateIsInCalendarValidity(calendarNodeMapReference.get(calendarId), dateTimeToValidate)) {
+            if(DateTimeUtils.dateIsInCalendarValidity(calendarNodeMap.get(calendarId), dateTimeToValidate)) {
                 nodeList.add(next);
             }
         }
@@ -85,8 +92,8 @@ public class ConnectionSearcher {
             .order(CustomBranchOrderingPolicies.DEPARTURE_ORDERING)
             .uniqueness(Uniqueness.NODE_PATH)
             .expand(new DepartureTypeExpander(departureDateTime, new LocalDateTime(maxDeparture),
-                (int) maxTransfers, calendarNodeMapReference), getEmptyInitialBranchState())
-            .evaluator(new DepartureTypeEvaluator(stopToName, departureDateTime, 3));
+                (int) maxTransfers, calendarNodeMap), getEmptyInitialBranchState())
+            .evaluator(new DepartureTypeEvaluator(stopToName, departureDateTime, MAX_NUMBER_OF_RESULTS));
 
         Map<String, SearchResultWrapper> ridesMap = new HashMap<>();
         int secondsOfDepartureDay = departureDateTime.getMillisOfDay() / 1000;
@@ -179,7 +186,32 @@ public class ConnectionSearcher {
 
         //vysledky vyhledavani dam do listu a vratim. momentalne tam jsou vysledky, ktere dale musi byt vyfiltrovany!
         List<SearchResultWrapper> searchResultWrappers = transformSearchResultWrapperMapToList(ridesMap);
-        return searchResultWrappers.stream();
+        List<SearchResultWrapper> toRet = sortAndFilterSearchResults(searchResultWrappers);
+
+        return toRet.stream();
+    }
+
+    /**
+     * @param searchResultWrappers vysledky hledani k serazeni a filtrovani
+     * @return serazene a vyfiltrovane vysledky hledani
+     */
+    private static List<SearchResultWrapper> sortAndFilterSearchResults(List<SearchResultWrapper> searchResultWrappers) {
+        //seradim vysledky vlastnim algoritmem
+        searchResultWrappers.sort(new SearchResultByDepartureDateComparator());
+
+        //vratim jen ty nejrelevantnejsi vyfiltrovane vysledky
+        List<SearchResultWrapper> filteredList = SearchResultFilter.getFilteredResults(searchResultWrappers);
+
+        if(filteredList.size() <= MAX_NUMBER_OF_RESULTS) {
+            return filteredList;
+        }
+
+        List<SearchResultWrapper> retList = new ArrayList<>(MAX_NUMBER_OF_RESULTS);
+        for(int i = 0; i < MAX_NUMBER_OF_RESULTS; i++) {
+            retList.add(i, filteredList.get(i));
+        }
+
+        return retList;
     }
 
     private static String getStopTimeInfoTmp(String stopName, String tripId, Long arrival, Long departure) {
