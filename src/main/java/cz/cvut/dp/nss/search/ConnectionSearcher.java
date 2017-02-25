@@ -60,8 +60,6 @@ public class ConnectionSearcher {
                                                @Name("maxTransfers") long maxTransfers) {
 
         //TODO neuvazuje minimalni cas na prestup (asi expander!)
-
-        //TODO mapa by asi mela vzniknout kopii, protoze takto predavam porad tu synchronizovanou coz je na #$@
         final LocalDateTime departureDateTime = new LocalDateTime(departure);
         final int departureSecondsOfDay = departureDateTime.getMillisOfDay() / 1000;
 
@@ -245,7 +243,6 @@ public class ConnectionSearcher {
             }
             realCalendarNode.setCalendarDateNodes(calendarDateNodes);
 
-            //realCalendarNode.setCalendarDateNodes();
             map.put(realCalendarNode.getCalendarId(), realCalendarNode);
         }
 
