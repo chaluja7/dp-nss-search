@@ -109,6 +109,11 @@ public class ConnectionSearcher {
                 travelTime = (DateTimeUtils.SECONDS_IN_DAY - secondsOfDeparture) + secondsOfArrival;
             }
 
+            boolean overMidnightDeparture = false;
+            if(secondsOfDeparture < secondsOfDepartureDay) {
+                overMidnightDeparture = true;
+            }
+
             boolean overMidnightArrival = false;
             if(secondsOfArrival < secondsOfDepartureDay) {
                 overMidnightArrival = true;
@@ -172,6 +177,7 @@ public class ConnectionSearcher {
                 wrapper.setDeparture(secondsOfDeparture);
                 wrapper.setArrival(secondsOfArrival);
                 wrapper.setTravelTime(travelTime);
+                wrapper.setOverMidnightDeparture(overMidnightDeparture);
                 wrapper.setOverMidnightArrival(overMidnightArrival);
                 wrapper.setStops(stopTimesOnPath);
                 //TODO docasne jen pro debug

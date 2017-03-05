@@ -17,6 +17,8 @@ public class SearchResultWrapper {
 
     public long arrival;
 
+    public boolean overMidnightDeparture;
+
     public boolean overMidnightArrival;
 
     public long numberOfTransfers;
@@ -47,6 +49,14 @@ public class SearchResultWrapper {
 
     public void setArrival(long arrival) {
         this.arrival = arrival;
+    }
+
+    public boolean isOverMidnightDeparture() {
+        return overMidnightDeparture;
+    }
+
+    public void setOverMidnightDeparture(boolean overMidnightDeparture) {
+        this.overMidnightDeparture = overMidnightDeparture;
     }
 
     public boolean isOverMidnightArrival() {
