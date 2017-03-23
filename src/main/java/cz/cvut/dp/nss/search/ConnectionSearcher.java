@@ -59,6 +59,21 @@ public class ConnectionSearcher {
                                                @Name("departure") long departure, @Name("maxDeparture") long maxDeparture,
                                                @Name("maxTransfers") long maxTransfers) {
 
+        //pokud mame prazdnou mapu calendarNodeMap tak ji inicializujeme
+        if(calendarNodeMap.isEmpty()) {
+            initCalendarDates();
+
+            //a pokud je stale prazdna tak muzeme hned vratit prazdny vysledek hledani
+            if(calendarNodeMap.isEmpty()) {
+                return new ArrayList<SearchResultWrapper>().stream();
+            }
+        }
+
+        //zjistim, jestli vubec existuje cilova stanice - pokud ne tak vracim prazdny vysledek hledani
+        if(!stopWithNameExists(stopToName)) {
+            return new ArrayList<SearchResultWrapper>().stream();
+        }
+
         //TODO neuvazuje minimalni cas na prestup (asi expander!)
         final LocalDateTime departureDateTime = new LocalDateTime(departure);
         final int departureSecondsOfDay = departureDateTime.getMillisOfDay() / 1000;
@@ -195,6 +210,43 @@ public class ConnectionSearcher {
         return toRet.stream();
     }
 
+    @Procedure(name = "cz.cvut.dp.nss.search.initCalendarDates", mode = READ)
+    public void initCalendarDates() {
+        Map<String, CalendarNode> map = new HashMap<>();
+        ResourceIterator<Node> calendarNodes = db.findNodes(CalendarNode.NODE_LABEL);
+        while(calendarNodes.hasNext()) {
+            Node calendarNode = calendarNodes.next();
+            CalendarNode realCalendarNode = getCalendarNodeFromNode(calendarNode);
+
+            Iterable<Relationship> relationships = calendarNode.getRelationships(CalendarNode.REL_IN_CALENDAR, Direction.INCOMING);
+            Set<CalendarDateNode> calendarDateNodes = new HashSet<>();
+            for(Relationship relationship : relationships) {
+                calendarDateNodes.add(getCalendarDateNodeFromNode(relationship.getStartNode()));
+            }
+            realCalendarNode.setCalendarDateNodes(calendarDateNodes);
+
+            map.put(realCalendarNode.getCalendarId(), realCalendarNode);
+        }
+
+        synchronized(calendarNodeMap) {
+            calendarNodeMap.clear();
+            calendarNodeMap.putAll(map);
+        }
+    }
+
+    /**
+     * @param stopName nazev stanice
+     * @return true, pokud v db je alespon jeden stopTimeNode na dane stanici
+     */
+    private boolean stopWithNameExists(String stopName) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("stopName", stopName);
+
+        String queryString = "match (s:StopTimeNode {stopName: {stopName}}) return s limit 1";
+        Result result = db.execute(queryString, params);
+        return result.hasNext();
+    }
+
     /**
      * @param searchResultWrappers vysledky hledani k serazeni a filtrovani
      * @return serazene a vyfiltrovane vysledky hledani
@@ -232,30 +284,6 @@ public class ConnectionSearcher {
         builder.append(" Příjezd: ").append(arrivalDateTime).append("; Odjezd: ").append(departureDateTime);
 
         return builder.toString();
-    }
-
-    @Procedure(name = "cz.cvut.dp.nss.search.initCalendarDates", mode = READ)
-    public void initCalendarDates() {
-        Map<String, CalendarNode> map = new HashMap<>();
-        ResourceIterator<Node> calendarNodes = db.findNodes(CalendarNode.NODE_LABEL);
-        while(calendarNodes.hasNext()) {
-            Node calendarNode = calendarNodes.next();
-            CalendarNode realCalendarNode = getCalendarNodeFromNode(calendarNode);
-
-            Iterable<Relationship> relationships = calendarNode.getRelationships(CalendarNode.REL_IN_CALENDAR, Direction.INCOMING);
-            Set<CalendarDateNode> calendarDateNodes = new HashSet<>();
-            for(Relationship relationship : relationships) {
-                calendarDateNodes.add(getCalendarDateNodeFromNode(relationship.getStartNode()));
-            }
-            realCalendarNode.setCalendarDateNodes(calendarDateNodes);
-
-            map.put(realCalendarNode.getCalendarId(), realCalendarNode);
-        }
-
-        synchronized(calendarNodeMap) {
-            calendarNodeMap.clear();
-            calendarNodeMap.putAll(map);
-        }
     }
 
     /**
