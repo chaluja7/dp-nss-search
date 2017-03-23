@@ -159,8 +159,17 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
         if(lastRelationShip.isType(StopTimeNode.REL_NEXT_AWAITING_STOP)) {
             //zjistim, jestli uz muzu na tento spoj prestoupit vzhledem k minimalnimu poctu minut na prestup
             final long thisStopArrival = stopTripWrapperOld.getThisStopArrival();
-            if((thisStopArrival + DateTimeUtils.MIN_TRANSFER_SECONDS) > currentNodeTimeProperty) {
-                return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_AWAITING_STOP);
+            final long tmpWithPenalty = thisStopArrival + DateTimeUtils.MIN_TRANSFER_SECONDS;
+            if(currentNodeTimeProperty >= thisStopArrival) {
+                //nejsem pres pulnoc
+                if(tmpWithPenalty > currentNodeTimeProperty) {
+                    return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_AWAITING_STOP);
+                }
+            } else {
+                //jsem pres pulnoc
+                if(tmpWithPenalty > DateTimeUtils.SECONDS_IN_DAY && (tmpWithPenalty - DateTimeUtils.SECONDS_IN_DAY) > currentNodeTimeProperty) {
+                    return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_AWAITING_STOP);
+                }
             }
 
             //vytahnu si calendar pro tento trip a budu zjistovat, zda je trip platny v tomto dni
