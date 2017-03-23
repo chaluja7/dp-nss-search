@@ -80,12 +80,12 @@ public class ConnectionSearcher {
 
         //najdu uzly ze kterych muzu vyrazit a jeste je zkontroluji na platnost calendar
         //vyhovujici pridavam do listu nodeList
-        ResourceIterator<Node> startNodes = findStartNodesForDepartureTypePathFinding(stopFromName, departure, maxDeparture);
+        final ResourceIterator<Node> startNodes = findStartNodesForDepartureTypePathFinding(stopFromName, departure, maxDeparture);
         final List<Node> nodeList = new ArrayList<>();
         while(startNodes.hasNext()) {
             Node next = startNodes.next();
 
-            boolean overMidnightDepartureInTrip = (boolean) next.getProperty(StopTimeNode.OVER_MIDNIGHT_PROPERTY);
+            final boolean overMidnightDepartureInTrip = (boolean) next.getProperty(StopTimeNode.OVER_MIDNIGHT_PROPERTY);
             //uzly zde urcite maji departure, protoze tak jsem je vyselectovat pomoci cypheru
             final long currentNodeDeparture = (long) next.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
 
@@ -112,11 +112,11 @@ public class ConnectionSearcher {
         int secondsOfDepartureDay = departureDateTime.getMillisOfDay() / 1000;
         Traverser traverser = traversalDescription.traverse(nodeList);
         for(Path path : traverser) {
-            Node startNode = path.startNode();
-            Node endNode = path.endNode();
+            final Node startNode = path.startNode();
+            final Node endNode = path.endNode();
 
-            long secondsOfArrival = ((long) endNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY));
-            long secondsOfDeparture = ((long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY));
+            final long secondsOfArrival = ((long) endNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY));
+            final long secondsOfDeparture = ((long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY));
             long travelTime;
             if(secondsOfArrival >= secondsOfDeparture) {
                 travelTime = secondsOfArrival - secondsOfDeparture;
@@ -135,7 +135,7 @@ public class ConnectionSearcher {
             }
 
             //vyberu tripy, po kterych jede cesta
-            final List<String> tripsOnPath = new ArrayList<>();
+            final Set<String> tripsOnPath = new LinkedHashSet<>();
             final List<Long> stopTimesOnPath = new ArrayList<>();
             final List<String> stopTimesOnPathInfo = new ArrayList<>();
             RelationshipType prevRelationshipType = null;
@@ -167,7 +167,7 @@ public class ConnectionSearcher {
                 }
             }
 
-            long lastStopTimeId = (long) endNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
+            final long lastStopTimeId = (long) endNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
 
             final String endNodeStopNameProperty = (String) endNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
             final String endNodeTripProperty = (String) endNode.getProperty(StopTimeNode.TRIP_PROPERTY);

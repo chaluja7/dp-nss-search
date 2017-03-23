@@ -11,7 +11,10 @@ import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.traversal.BranchState;
 import org.neo4j.helpers.collection.Iterables;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Departure type expander implementation.
@@ -61,7 +64,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
         //Predavani parametru PATH, pokazde musim vytvorit nove instance, aby se jednotlive path neovlivnovali
         final StopTripWrapper stopTripWrapperOld = branchState.getState();
         //jmeno stanice -> id tripu, na kterych jsem jiz stanici navstivil
-        final Map<String, List<String>> visitedStops = CollectionCloneUtils.cloneMap(stopTripWrapperOld.getVisitedStops());
+        final Map<String, Set<String>> visitedStops = CollectionCloneUtils.cloneMap(stopTripWrapperOld.getVisitedStops());
         //id tripu, ktere jsem jiz navstivil
         final Set<String> visitedTrips = CollectionCloneUtils.cloneSet(stopTripWrapperOld.getVisitedTrips());
 
@@ -69,6 +72,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
         final StopTripWrapper stopTripWrapper = new StopTripWrapper();
         stopTripWrapper.setVisitedStops(visitedStops);
         stopTripWrapper.setVisitedTrips(visitedTrips);
+        stopTripWrapper.setThisStopArrival(stopTripWrapperOld.getThisStopArrival());
         branchState.setState(stopTripWrapper);
 
         //inicializace parametru PATH
@@ -110,11 +114,11 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             travelTime = DateTimeUtils.SECONDS_IN_DAY - startNodeDeparture + inverseCurrentNodeTimeProperty;
         }
         //cas cesty s penalizacemi za prestup
-        final long travelTimeWithPenalty = travelTime + (visitedTrips.size() * DateTimeUtils.TRANSFER_PENALTY_SECONDS);
+        final long travelTimeWithPenalty = travelTime + ((visitedTrips.size() - 1) * DateTimeUtils.TRANSFER_PENALTY_SECONDS);
 
         //Jsem na prvnim NODu
         if(lastRelationShip == null) {
-            final List<String> tmpVisitedTrips = new ArrayList<>();
+            final Set<String> tmpVisitedTrips = new HashSet<>();
             tmpVisitedTrips.add(currentTripId);
 
             //a do path parametru pridam potrebne info (navstiveny trip a stanice)
@@ -153,6 +157,12 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
 
         //Posledni hrana byla cekaci
         if(lastRelationShip.isType(StopTimeNode.REL_NEXT_AWAITING_STOP)) {
+            //zjistim, jestli uz muzu na tento spoj prestoupit vzhledem k minimalnimu poctu minut na prestup
+            final long thisStopArrival = stopTripWrapperOld.getThisStopArrival();
+            if((thisStopArrival + DateTimeUtils.MIN_TRANSFER_SECONDS) > currentNodeTimeProperty) {
+                return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_AWAITING_STOP);
+            }
+
             //vytahnu si calendar pro tento trip a budu zjistovat, zda je trip platny v tomto dni
             final Relationship inTripRelationship = currentNode.getSingleRelationship(StopTimeNode.REL_IN_TRIP, Direction.OUTGOING);
             final Node currentTripNode = inTripRelationship.getEndNode();
@@ -169,18 +179,17 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             //posledni hrana byla next_stop, mimo jine to znamena, ze currentNodeArrival nemuze byt null
             assert(currentNodeArrival != null);
 
+            stopTripWrapper.setThisStopArrival(currentNodeArrival);
             //v ramci teto path jsem na teto stanici jiz byl (tedy se vracim, coz je nezadouci)
             //ovsem v ramci jednoho tripu muzu na jednu stanici vicenasobne
             if(visitedStops.containsKey(currentStopName)) {
-                List<String> tripsWithThisStation = visitedStops.get(currentStopName);
-                for(String tripId : tripsWithThisStation) {
-                    if(!tripId.equals(currentTripId)) {
-                        //na teto stanici jsem byl jiz na jinem tripu, nez aktualnim
-                        return Iterables.empty();
-                    }
+                final Set<String> tripsWithThisStation = visitedStops.get(currentStopName);
+                if(tripsWithThisStation.contains(currentTripId)) {
+                    //na teto stanici jsem byl jiz na jinem tripu, nez aktualnim
+                    return Iterables.empty();
                 }
             } else {
-                visitedStops.put(currentStopName, new ArrayList<>());
+                visitedStops.put(currentStopName, new HashSet<>());
             }
 
             visitedStops.get(currentStopName).add(currentTripId);
@@ -205,7 +214,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             int i = 0;
             RelationshipType prevRelationShipType = null;
             for(Relationship relationship : path.reverseRelationships()) {
-                boolean relationshipIsTypeNextAwaitingStop = relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP);
+                final boolean relationshipIsTypeNextAwaitingStop = relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP);
 
                 //sel jsem (N)-[NEXT_AWAITING_STOP]-(m)-[NEXT_STOP]-(o)
                 if(prevRelationShipType != null && relationshipIsTypeNextAwaitingStop && prevRelationShipType.equals(StopTimeNode.REL_NEXT_STOP)) {

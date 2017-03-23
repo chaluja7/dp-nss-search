@@ -28,6 +28,11 @@ public class DateTimeUtils {
     public static final int TRANSFER_PENALTY_SECONDS = 300;
 
     /**
+     * 2,5 minuty minimalne nutne na prestup
+     */
+    public static final int MIN_TRANSFER_SECONDS = 150;
+
+    /**
      * @param calendarNode calendarNode proti kteremu overuji platnost localDateTime
      * @param localDateTime datum a cas, pro ktere kontroluji platnost v ramci calendarNode
      * @return true, pokud je localDateTime platny pro dany calendarNode, false jinak

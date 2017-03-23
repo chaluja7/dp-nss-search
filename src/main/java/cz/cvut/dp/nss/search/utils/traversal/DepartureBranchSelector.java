@@ -37,28 +37,31 @@ public class DepartureBranchSelector implements BranchSelector {
         TraversalBranch result = null;
 
         while(result == null) {
-            TraversalBranch next = current.next(expander, metadata);
+            final TraversalBranch next = current.next(expander, metadata);
             if(next != null) {
-                Node startNode = next.startNode();
-                Node endNode = next.endNode();
+                final Node startNode = next.startNode();
+                final Node endNode = next.endNode();
 
                 //cas vyjezdu na teto ceste
-                long departureTime = (long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
+                final long departureTime = (long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
                 //currentTime je arrival, pokud existuje, jinak departure. jde o koncovy uzel na aktualni ceste
-                long currentTime;
-                if(endNode.hasProperty(StopTimeNode.ARRIVAL_PROPERTY)) {
-                    currentTime = (long) endNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY);
-                } else {
-                    currentTime = (long) endNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
-                }
+                final Long currentNodeArrival = endNode.hasProperty(StopTimeNode.ARRIVAL_PROPERTY) ? (long) endNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY) : null;
+                final Long currentNodeDeparture = endNode.hasProperty(StopTimeNode.DEPARTURE_PROPERTY) ? (long) endNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY) : null;
 
                 //zjisti cas uplne prvniho zpracovavaneho uzlu (v ramci vsech cest, nejen teto)
                 if(globalFirstNodeDeparture == null) {
                     globalFirstNodeDeparture = departureTime;
                 }
 
+                final long currentTime;
+                if(currentNodeArrival != null && startNode.getId() != endNode.getId() && !(currentNodeArrival < globalFirstNodeDeparture && currentNodeDeparture != null && currentNodeDeparture > globalFirstNodeDeparture)) {
+                    currentTime = currentNodeArrival;
+                } else {
+                    currentTime = currentNodeDeparture;
+                }
+
                 //zjistim, zda jsem se prehoupl pres pulnoc od uplne prvniho zpracovavaneho uzlu
-                boolean overMidnight;
+                final boolean overMidnight;
                 if(globalFirstNodeDeparture <= currentTime) {
                     overMidnight = false;
                 } else {
@@ -77,7 +80,7 @@ public class DepartureBranchSelector implements BranchSelector {
                 int numOfTransfers = 0;
                 RelationshipType prevRelationShipType = null;
                 for(Relationship relationship : next.reverseRelationships()) {
-                    boolean relationshipIsTypeNextAwaitingStop = relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP);
+                    final boolean relationshipIsTypeNextAwaitingStop = relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP);
                     //sel jsem (N)-[NEXT_AWAITING_STOP]-(m)-[NEXT_STOP]-(o); tzn prestoupil jsem na jiny trip
                     if(prevRelationShipType != null && relationshipIsTypeNextAwaitingStop && prevRelationShipType.equals(StopTimeNode.REL_NEXT_STOP)) {
                         numOfTransfers++;

@@ -1,6 +1,9 @@
 package cz.cvut.dp.nss.search.utils;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Util for deep collections cloning.
@@ -11,23 +14,18 @@ import java.util.*;
 public class CollectionCloneUtils {
 
     public static Set<String> cloneSet(Set<String> set) {
-        Set<String> clone = new HashSet<>(set.size());
-        for(String item : set) {
-            clone.add(item);
-        }
-
+        final Set<String> clone = new HashSet<>(set.size());
+        clone.addAll(set);
         return clone;
     }
 
-    public static Map<String, List<String>> cloneMap(Map<String, List<String>> map) {
-        Map<String, List<String>> clone = new HashMap<>(map.size());
-        for (Map.Entry<String, List<String>> entry : map.entrySet()) {
-            List<String> cloneList = new ArrayList<>();
-            for(String item : entry.getValue()) {
-                cloneList.add(item);
-            }
+    public static Map<String, Set<String>> cloneMap(Map<String, Set<String>> map) {
+        final Map<String, Set<String>> clone = new HashMap<>(map.size());
+        for(Map.Entry<String, Set<String>> entry : map.entrySet()) {
+            final Set<String> cloneSet = new HashSet<>();
+            cloneSet.addAll(entry.getValue());
 
-            clone.put(entry.getKey(), cloneList);
+            clone.put(entry.getKey(), cloneSet);
         }
 
         return clone;

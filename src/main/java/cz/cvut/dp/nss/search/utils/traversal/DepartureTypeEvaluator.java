@@ -78,13 +78,18 @@ public final class DepartureTypeEvaluator implements Evaluator {
 
         final long currentNodeTimeProperty = currentNodeArrival != null ? currentNodeArrival : currentNodeDeparture;
 
+        //tripy navstivene po teto ceste
+        final Set<String> tmpTrips = new HashSet<>();
         //POKUD jsem jiz na teto ceste (od start node) nasel cil v lepsim case
         if(foundedPaths.containsKey(startNodeStopTimeId)) {
+            //do setu si ulozim vsechny jiz navstivene tripy po teto ceste
+            fillVisitedTrips(tmpTrips, path);
+
             //vytahnu si cas, v jakem jsem jiz nasel cil kde start byl startNodeStopTimeId
             final long prevBestFoundedPathStart = foundedPaths.get(startNodeStopTimeId);
             //a cas aktualniho uzlu pro porovnani, pokud uz bych byl s casem dal, nez v jakem case jsem jiz od
             //tohoto startu nasel cil, tak nema cenu dale traverzovat, protoze cil urcite jiz v lepsim case nenajdu
-            long currentNodeTimeWithPenalty = currentNodeTimeProperty + (DateTimeUtils.TRANSFER_PENALTY_SECONDS * foundedPathsNumOfTransfers.get(startNodeStopTimeId));
+            long currentNodeTimeWithPenalty = currentNodeTimeProperty + (DateTimeUtils.TRANSFER_PENALTY_SECONDS * (tmpTrips.size() - 1));
             if(currentNodeTimeWithPenalty >= DateTimeUtils.SECONDS_IN_DAY) {
                 //prehoupl jsem se s penalizaci do dalsiho dne
                 currentNodeTimeWithPenalty = currentNodeTimeWithPenalty - DateTimeUtils.SECONDS_IN_DAY;
@@ -120,14 +125,7 @@ public final class DepartureTypeEvaluator implements Evaluator {
         //nasel jsem
         if(currentNodeStopName.equals(endStopName)) {
             //do setu si ulozim vsechny jiz navstivene tripy po teto ceste
-            final Set<String> tmpTrips = new HashSet<>();
-            String tmpTrip;
-            for(Node n : path.nodes()) {
-                tmpTrip = (String) n.getProperty(StopTimeNode.TRIP_PROPERTY);
-                if(!tmpTrips.contains(tmpTrip)) {
-                    tmpTrips.add(tmpTrip);
-                }
-            }
+            if(tmpTrips.isEmpty()) fillVisitedTrips(tmpTrips, path);
 
             //zjistim cas aktualniho uzlu i s penalizaci za prestup
             long currentNodeTimeWithPenalty = currentNodeTimeProperty + (DateTimeUtils.TRANSFER_PENALTY_SECONDS * (tmpTrips.size() - 1));
@@ -183,13 +181,23 @@ public final class DepartureTypeEvaluator implements Evaluator {
                 foundedPathsDetails.put(startNodeStopTimeId, tmpTrips);
             }
 
-            prevFoundedDeparture = startNodeDeparture;
+            prevFoundedDeparture = prevFoundedDeparture == null ? startNodeDeparture : Math.max(startNodeDeparture, prevFoundedDeparture);
             foundedPaths.put(startNodeStopTimeId, currentNodeTimeWithPenalty);
             foundedPathsNumOfTransfers.put(startNodeStopTimeId, tmpTrips.size() - 1);
             return Evaluation.INCLUDE_AND_PRUNE;
         }
 
         return Evaluation.EXCLUDE_AND_CONTINUE;
+    }
+
+    private void fillVisitedTrips(Set<String> tmpTrips, Path path) {
+        String tmpTrip;
+        for(Node n : path.nodes()) {
+            tmpTrip = (String) n.getProperty(StopTimeNode.TRIP_PROPERTY);
+            if(!tmpTrips.contains(tmpTrip)) {
+                tmpTrips.add(tmpTrip);
+            }
+        }
     }
 
 }

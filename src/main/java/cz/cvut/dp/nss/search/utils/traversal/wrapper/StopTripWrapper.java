@@ -1,6 +1,9 @@
 package cz.cvut.dp.nss.search.utils.traversal.wrapper;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Wrapper to wrap stations for traversal purposes.
@@ -12,7 +15,15 @@ public class StopTripWrapper {
 
     private Set<String> visitedTrips;
 
-    private Map<String, List<String>> visitedStops;
+    /**
+     * id stanice -> id tripu v ramci kterych jsem uz na dane stanici byl
+     */
+    private Map<String, Set<String>> visitedStops;
+
+    /**
+     * cas prijezdu na aktualni stanici (pro zjisteni, jak dlouho uz na nic cekam na prestup)
+     */
+    private long thisStopArrival;
 
     public Set<String> getVisitedTrips() {
         if(visitedTrips == null) {
@@ -26,7 +37,7 @@ public class StopTripWrapper {
         this.visitedTrips = visitedTrips;
     }
 
-    public Map<String, List<String>> getVisitedStops() {
+    public Map<String, Set<String>> getVisitedStops() {
         if(visitedStops == null) {
             visitedStops = new HashMap<>();
         }
@@ -34,7 +45,15 @@ public class StopTripWrapper {
         return visitedStops;
     }
 
-    public void setVisitedStops(Map<String, List<String>> visitedStops) {
+    public void setVisitedStops(Map<String, Set<String>> visitedStops) {
         this.visitedStops = visitedStops;
+    }
+
+    public long getThisStopArrival() {
+        return thisStopArrival;
+    }
+
+    public void setThisStopArrival(long thisStopArrival) {
+        this.thisStopArrival = thisStopArrival;
     }
 }
