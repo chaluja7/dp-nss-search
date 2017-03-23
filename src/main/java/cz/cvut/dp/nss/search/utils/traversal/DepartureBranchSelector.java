@@ -54,7 +54,9 @@ public class DepartureBranchSelector implements BranchSelector {
                 }
 
                 final long currentTime;
-                if(currentNodeArrival != null && startNode.getId() != endNode.getId() && !(currentNodeArrival < globalFirstNodeDeparture && currentNodeDeparture != null && currentNodeDeparture > globalFirstNodeDeparture)) {
+                //pokud neni arrival null a soucasne nejsem na uplne prvnim uzlu (endNode == startNode)
+                //a soucasne neplati, ze (arrival < globalDeparture a departure > globalDeparture)  - tim resim pulnoc
+                if(currentNodeArrival != null && startNode.getId() != endNode.getId() && (currentNodeArrival > globalFirstNodeDeparture || currentNodeDeparture == null || (currentNodeDeparture < globalFirstNodeDeparture && currentNodeArrival <= currentNodeDeparture))) {
                     currentTime = currentNodeArrival;
                 } else {
                     currentTime = currentNodeDeparture;

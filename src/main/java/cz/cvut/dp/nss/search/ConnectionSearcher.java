@@ -74,7 +74,6 @@ public class ConnectionSearcher {
             return new ArrayList<SearchResultWrapper>().stream();
         }
 
-        //TODO neuvazuje minimalni cas na prestup (asi expander!)
         final LocalDateTime departureDateTime = new LocalDateTime(departure);
         final int departureSecondsOfDay = departureDateTime.getMillisOfDay() / 1000;
 
