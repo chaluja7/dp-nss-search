@@ -7,7 +7,7 @@ import cz.cvut.dp.nss.search.entity.trip.TripNode;
 import cz.cvut.dp.nss.search.utils.DateTimeUtils;
 import cz.cvut.dp.nss.search.utils.comparator.SearchResultByDepartureDateComparator;
 import cz.cvut.dp.nss.search.utils.filter.SearchResultFilter;
-import cz.cvut.dp.nss.search.utils.traversal.CustomBranchOrderingPolicies;
+import cz.cvut.dp.nss.search.utils.traversal.DepartureBranchSelector;
 import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeEvaluator;
 import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeExpander;
 import cz.cvut.dp.nss.search.utils.traversal.wrapper.StopTripWrapper;
@@ -101,7 +101,7 @@ public class ConnectionSearcher {
 
         //predpis vyhledavani cest
         TraversalDescription traversalDescription = db.traversalDescription()
-            .order(CustomBranchOrderingPolicies.DEPARTURE_ORDERING)
+            .order((startBranch, expander) -> new DepartureBranchSelector(startBranch, expander, stopToName))
             .uniqueness(Uniqueness.NODE_PATH)
             .expand(new DepartureTypeExpander(departureDateTime, new LocalDateTime(maxDeparture),
                 (int) maxTransfers, calendarNodeMap), getEmptyInitialBranchState())

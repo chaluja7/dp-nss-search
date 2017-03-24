@@ -34,8 +34,7 @@ public class CustomPriorityQueue {
             return null;
         }
 
-        TraversalBranchWrapper wrapper = priorityQueue.poll();
-        return wrapper.getTraversalBranch();
+        return priorityQueue.poll().getTraversalBranch();
     }
 
 }

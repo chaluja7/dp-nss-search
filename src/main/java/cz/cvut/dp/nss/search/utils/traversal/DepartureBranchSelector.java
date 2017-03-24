@@ -5,8 +5,6 @@ import cz.cvut.dp.nss.search.utils.DateTimeUtils;
 import cz.cvut.dp.nss.search.utils.traversal.wrapper.CustomPriorityQueue;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.PathExpander;
-import org.neo4j.graphdb.Relationship;
-import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.traversal.BranchSelector;
 import org.neo4j.graphdb.traversal.TraversalBranch;
 import org.neo4j.graphdb.traversal.TraversalContext;
@@ -25,11 +23,14 @@ public class DepartureBranchSelector implements BranchSelector {
 
     private final PathExpander expander;
 
+    private final String stopToName;
+
     private Long globalFirstNodeDeparture;
 
-    public DepartureBranchSelector(TraversalBranch startSource, PathExpander expander) {
+    public DepartureBranchSelector(TraversalBranch startSource, PathExpander expander, String stopToName) {
         this.current = startSource;
         this.expander = expander;
+        this.stopToName = stopToName;
     }
 
     @Override
@@ -47,57 +48,32 @@ public class DepartureBranchSelector implements BranchSelector {
                 //currentTime je arrival, pokud existuje, jinak departure. jde o koncovy uzel na aktualni ceste
                 final Long currentNodeArrival = endNode.hasProperty(StopTimeNode.ARRIVAL_PROPERTY) ? (long) endNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY) : null;
                 final Long currentNodeDeparture = endNode.hasProperty(StopTimeNode.DEPARTURE_PROPERTY) ? (long) endNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY) : null;
+                final String currentStopName = (String) endNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
 
                 //zjisti cas uplne prvniho zpracovavaneho uzlu (v ramci vsech cest, nejen teto)
                 if(globalFirstNodeDeparture == null) {
                     globalFirstNodeDeparture = departureTime;
                 }
 
+                //zajima me departure time pokud existuje. Vyjimka je, pokud jsem na cilove stanici
+                //v tom pripade beru arrival (departure uz me zajimat nebude, protoze travezrovani skonci)
                 final long currentTime;
-                //pokud neni arrival null a soucasne nejsem na uplne prvnim uzlu (endNode == startNode)
-                //a soucasne neplati, ze (arrival < globalDeparture a departure > globalDeparture)  - tim resim pulnoc
-                if(currentNodeArrival != null && startNode.getId() != endNode.getId() && (currentNodeArrival > globalFirstNodeDeparture || currentNodeDeparture == null || (currentNodeDeparture < globalFirstNodeDeparture && currentNodeArrival <= currentNodeDeparture))) {
+                if(currentNodeDeparture == null || currentStopName.equals(stopToName)) {
                     currentTime = currentNodeArrival;
                 } else {
                     currentTime = currentNodeDeparture;
                 }
 
                 //zjistim, zda jsem se prehoupl pres pulnoc od uplne prvniho zpracovavaneho uzlu
-                final boolean overMidnight;
-                if(globalFirstNodeDeparture <= currentTime) {
-                    overMidnight = false;
-                } else {
-                    overMidnight = true;
-                }
+                final boolean overMidnight = globalFirstNodeDeparture > currentTime;
 
                 //zjistim delku aktualni cesty (start-end) ve vterinach
-                long travelTime;
+                final long travelTime;
                 if(departureTime <= currentTime) {
                     travelTime = currentTime - departureTime;
                 } else {
                     travelTime = DateTimeUtils.SECONDS_IN_DAY - departureTime + currentTime;
                 }
-
-                //zjistim pocet prestupu na aktualni ceste, k tomu musim projit vsechny hrany mezi start a end a hledat prestupni
-                int numOfTransfers = 0;
-                RelationshipType prevRelationShipType = null;
-                for(Relationship relationship : next.reverseRelationships()) {
-                    final boolean relationshipIsTypeNextAwaitingStop = relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP);
-                    //sel jsem (N)-[NEXT_AWAITING_STOP]-(m)-[NEXT_STOP]-(o); tzn prestoupil jsem na jiny trip
-                    if(prevRelationShipType != null && relationshipIsTypeNextAwaitingStop && prevRelationShipType.equals(StopTimeNode.REL_NEXT_STOP)) {
-                        numOfTransfers++;
-                    }
-
-                    //a do dalsi iterace si urcim prevRelatinshipType, coz je ten aktualni
-                    if(relationshipIsTypeNextAwaitingStop) {
-                        prevRelationShipType = StopTimeNode.REL_NEXT_AWAITING_STOP;
-                    } else {
-                        prevRelationShipType = StopTimeNode.REL_NEXT_STOP;
-                    }
-                }
-
-                //celkovy cas jizdy zvysim o penalizace za prestupy
-                travelTime = travelTime + (numOfTransfers * DateTimeUtils.TRANSFER_PENALTY_SECONDS);
 
                 //a do fronty pridam aktualni cestu
                 queue.addPath(next, currentTime, travelTime, overMidnight);

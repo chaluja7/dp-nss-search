@@ -25,7 +25,7 @@ public class DateTimeUtils {
     /**
      * 3 minut penalizace za prestup
      */
-    public static final int TRANSFER_PENALTY_SECONDS = 180;
+    public static final int TRANSFER_PENALTY_SECONDS = 0;
 
     /**
      * 2,5 minuty minimalne nutne na prestup
