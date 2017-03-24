@@ -6,7 +6,6 @@ import cz.cvut.dp.nss.search.entity.stopTime.StopTimeNode;
 import cz.cvut.dp.nss.search.entity.trip.TripNode;
 import cz.cvut.dp.nss.search.utils.DateTimeUtils;
 import cz.cvut.dp.nss.search.utils.comparator.SearchResultByDepartureDateComparator;
-import cz.cvut.dp.nss.search.utils.filter.SearchResultFilter;
 import cz.cvut.dp.nss.search.utils.traversal.DepartureBranchSelector;
 import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeEvaluator;
 import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeExpander;
@@ -254,16 +253,13 @@ public class ConnectionSearcher {
         //seradim vysledky vlastnim algoritmem
         searchResultWrappers.sort(new SearchResultByDepartureDateComparator());
 
-        //vratim jen ty nejrelevantnejsi vyfiltrovane vysledky
-        List<SearchResultWrapper> filteredList = SearchResultFilter.getFilteredResults(searchResultWrappers);
-
-        if(filteredList.size() <= MAX_NUMBER_OF_RESULTS) {
-            return filteredList;
+        if(searchResultWrappers.size() <= MAX_NUMBER_OF_RESULTS) {
+            return searchResultWrappers;
         }
 
         List<SearchResultWrapper> retList = new ArrayList<>(MAX_NUMBER_OF_RESULTS);
         for(int i = 0; i < MAX_NUMBER_OF_RESULTS; i++) {
-            retList.add(i, filteredList.get(i));
+            retList.add(i, searchResultWrappers.get(i));
         }
 
         return retList;
@@ -292,7 +288,7 @@ public class ConnectionSearcher {
      * @param maxDateDepartureInMillis max datum odjezdu
      * @return vychozi zastaveni (serazena)
      */
-    protected ResourceIterator<Node> findStartNodesForDepartureTypePathFinding(String stopFromName, long departureInMillis, long maxDateDepartureInMillis) {
+    private ResourceIterator<Node> findStartNodesForDepartureTypePathFinding(String stopFromName, long departureInMillis, long maxDateDepartureInMillis) {
         LocalDateTime tempDateDeparture = new LocalDateTime(departureInMillis);
         LocalDateTime tempMaxDateDeparture = new LocalDateTime(maxDateDepartureInMillis);
 

@@ -4,6 +4,7 @@ import cz.cvut.dp.nss.search.entity.stopTime.StopTimeNode;
 import org.joda.time.LocalDateTime;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Path;
+import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.traversal.Evaluation;
 import org.neo4j.graphdb.traversal.Evaluator;
 
@@ -97,7 +98,7 @@ public final class DepartureTypeEvaluator implements Evaluator {
                     final long pathArrival = foundedPaths.get(stopTimeId);
                     if(pathArrival >= departureSecondsOfDay) {
                         //cil drive nalezene cesty byl pred pulnoci
-                        if((currentNodeArrival >= departureSecondsOfDay && currentNodeArrival > pathArrival) || currentNodeArrival < departureSecondsOfDay) {
+                        if((currentNodeArrival >= departureSecondsOfDay && currentNodeArrival >= pathArrival) || currentNodeArrival < departureSecondsOfDay) {
                             //momentalne jsem v cili taky pred pulnoci, ale s horsim casem nez jsem jiz byl, nebo jsem v cili az po pulnoci
                             //aktualne nalezenou cestu tedy nechci ukladat
                             saveMe = false;
@@ -108,7 +109,7 @@ public final class DepartureTypeEvaluator implements Evaluator {
                         }
                     } else {
                         //cil drive nalezene cesty byl po pulnoci
-                        if(currentNodeArrival < departureSecondsOfDay && currentNodeArrival > pathArrival) {
+                        if(currentNodeArrival < departureSecondsOfDay && currentNodeArrival >= pathArrival) {
                             //momentalne jsem taky po pulnoci ale pozdeji
                             //aktualne nalezenou cestu tedy nechci ukladat
                             saveMe = false;
@@ -121,17 +122,20 @@ public final class DepartureTypeEvaluator implements Evaluator {
                 }
             }
 
-            for(Long l : keysToRemove) {
-                foundedPathsDetails.remove(l);
-            }
-
             if(saveMe) {
                 foundedPathsDetails.put(startNodeStopTimeId, tmpTrips);
-            }
+                prevFoundedDeparture = prevFoundedDeparture == null ? startNodeDeparture : Math.max(startNodeDeparture, prevFoundedDeparture);
+                foundedPaths.put(startNodeStopTimeId, currentNodeArrival);
 
-            prevFoundedDeparture = prevFoundedDeparture == null ? startNodeDeparture : Math.max(startNodeDeparture, prevFoundedDeparture);
-            foundedPaths.put(startNodeStopTimeId, currentNodeArrival);
-            return Evaluation.INCLUDE_AND_PRUNE;
+                for(Long l : keysToRemove) {
+                    foundedPathsDetails.remove(l);
+                    foundedPathsDetails.remove(l);
+                }
+
+                return Evaluation.INCLUDE_AND_PRUNE;
+            } else {
+                return Evaluation.EXCLUDE_AND_PRUNE;
+            }
         }
 
         return Evaluation.EXCLUDE_AND_CONTINUE;
@@ -139,10 +143,12 @@ public final class DepartureTypeEvaluator implements Evaluator {
 
     private void fillVisitedTrips(Set<String> tmpTrips, Path path) {
         String tmpTrip;
-        for(Node n : path.nodes()) {
-            tmpTrip = (String) n.getProperty(StopTimeNode.TRIP_PROPERTY);
-            if(!tmpTrips.contains(tmpTrip)) {
-                tmpTrips.add(tmpTrip);
+        for(Relationship relationship : path.relationships()) {
+            if(relationship.isType(StopTimeNode.REL_NEXT_STOP)) {
+                tmpTrip = (String) relationship.getStartNode().getProperty(StopTimeNode.TRIP_PROPERTY);
+                if(!tmpTrips.contains(tmpTrip)) {
+                    tmpTrips.add(tmpTrip);
+                }
             }
         }
     }

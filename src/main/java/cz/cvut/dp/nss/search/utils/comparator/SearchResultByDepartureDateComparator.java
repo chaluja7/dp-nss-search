@@ -1,7 +1,6 @@
 package cz.cvut.dp.nss.search.utils.comparator;
 
 import cz.cvut.dp.nss.search.SearchResultWrapper;
-import cz.cvut.dp.nss.search.utils.DateTimeUtils;
 
 import java.util.Comparator;
 
@@ -32,15 +31,11 @@ public class SearchResultByDepartureDateComparator implements Comparator<SearchR
             return 1;
         }
 
-        //do razeni chci zakomponovat i penalizace za prestup! Toto funguje i pres pulnoc (dostanu se do zapornych cisel ale porovnani je stejne)
-        long o1DepartureWithPenalty = o1.getDeparture() - (DateTimeUtils.TRANSFER_PENALTY_SECONDS * o1.getNumberOfTransfers());
-        long o2DepartureWithPenalty = o2.getDeparture() - (DateTimeUtils.TRANSFER_PENALTY_SECONDS * o2.getNumberOfTransfers());
-
-        if(o1DepartureWithPenalty > o2DepartureWithPenalty) {
+        if(o1.getDeparture() > o2.getDeparture()) {
             return -1;
         }
 
-        if(o1DepartureWithPenalty < o2DepartureWithPenalty) {
+        if(o1.getDeparture() < o2.getDeparture()) {
             return 1;
         }
 

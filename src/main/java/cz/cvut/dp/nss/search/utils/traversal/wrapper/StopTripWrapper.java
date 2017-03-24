@@ -25,6 +25,11 @@ public class StopTripWrapper {
      */
     private long thisStopArrival;
 
+    /**
+     * maximalni cas, do ktereho muzu v dane vetvi iterovat. Pokud je prekrocen, neni mozne kamkoliv dale iterovat.
+     */
+    private Long maxValidityTime;
+
     public Set<String> getVisitedTrips() {
         if(visitedTrips == null) {
             visitedTrips = new HashSet<>();
@@ -55,5 +60,13 @@ public class StopTripWrapper {
 
     public void setThisStopArrival(long thisStopArrival) {
         this.thisStopArrival = thisStopArrival;
+    }
+
+    public Long getMaxValidityTime() {
+        return maxValidityTime;
+    }
+
+    public void setMaxValidityTime(Long maxValidityTime) {
+        this.maxValidityTime = maxValidityTime;
     }
 }

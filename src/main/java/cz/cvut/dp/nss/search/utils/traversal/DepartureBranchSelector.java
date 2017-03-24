@@ -3,6 +3,7 @@ package cz.cvut.dp.nss.search.utils.traversal;
 import cz.cvut.dp.nss.search.entity.stopTime.StopTimeNode;
 import cz.cvut.dp.nss.search.utils.DateTimeUtils;
 import cz.cvut.dp.nss.search.utils.traversal.wrapper.CustomPriorityQueue;
+import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.PathExpander;
 import org.neo4j.graphdb.traversal.BranchSelector;
@@ -41,7 +42,12 @@ public class DepartureBranchSelector implements BranchSelector {
             final TraversalBranch next = current.next(expander, metadata);
             if(next != null) {
                 final Node startNode = next.startNode();
-                final Node endNode = next.endNode();
+                Node endNode = next.endNode();
+
+                //TODO toto je hack, protoze potrebuji do evaluatoru dostavat nody ve spravnem poradi, kdyby neco nefungovalo tak toto smazat
+                if(endNode.hasRelationship(StopTimeNode.REL_NEXT_STOP, Direction.OUTGOING) && !((endNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY)).equals(stopToName))) {
+                    endNode = endNode.getSingleRelationship(StopTimeNode.REL_NEXT_STOP, Direction.OUTGOING).getEndNode();
+                }
 
                 //cas vyjezdu na teto ceste
                 final long departureTime = (long) startNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);

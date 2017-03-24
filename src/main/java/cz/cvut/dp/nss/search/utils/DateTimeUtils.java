@@ -23,11 +23,6 @@ public class DateTimeUtils {
     public static final int SECONDS_IN_DAY = 86400;
 
     /**
-     * 3 minut penalizace za prestup
-     */
-    public static final int TRANSFER_PENALTY_SECONDS = 0;
-
-    /**
      * 2,5 minuty minimalne nutne na prestup
      */
     public static final int MIN_TRANSFER_SECONDS = 150;

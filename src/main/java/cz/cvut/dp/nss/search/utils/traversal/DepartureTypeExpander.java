@@ -73,6 +73,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
         stopTripWrapper.setVisitedStops(visitedStops);
         stopTripWrapper.setVisitedTrips(visitedTrips);
         stopTripWrapper.setThisStopArrival(stopTripWrapperOld.getThisStopArrival());
+        stopTripWrapper.setMaxValidityTime(stopTripWrapperOld.getMaxValidityTime());
         branchState.setState(stopTripWrapper);
 
         //inicializace parametru PATH
@@ -105,8 +106,9 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
         final long inverseCurrentNodeTimeProperty = currentNodeArrival != null ? currentNodeArrival : currentNodeDeparture;
 
         //spocitani aktualniho travel time - od zacatku cesty do nynejsiho uzlu
+        final boolean overMidnight = inverseCurrentNodeTimeProperty < startNodeDeparture;
         final long travelTime;
-        if(inverseCurrentNodeTimeProperty >= startNodeDeparture) {
+        if(!overMidnight) {
             //v ramci dne
             travelTime = inverseCurrentNodeTimeProperty - startNodeDeparture;
         } else {
@@ -122,7 +124,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             //a do path parametru pridam potrebne info (navstiveny trip a stanice)
             visitedStops.put(currentStopName, tmpVisitedTrips);
             visitedTrips.add(currentTripId);
-            this.visitedStops.put(currentNodeStopTimeId, travelTime);
+            this.visitedStops.put(currentNodeStopTimeId, 0L);
 
             //vratit chci z prvniho nodu jen node na NEXT_STOP relaci (z prvniho uzlu nechci prestupovat)
             return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_STOP);
@@ -155,6 +157,23 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
 
         //Posledni hrana byla cekaci
         if(lastRelationShip.isType(StopTimeNode.REL_NEXT_AWAITING_STOP)) {
+            //pokud na tuto cestu mam uz jen vymezeny cas na prestup tak zkontroluji, zda jsem ho neprekonal
+            final Long currentMaxValidityTime = stopTripWrapper.getMaxValidityTime();
+            if(currentMaxValidityTime != null) {
+                if(!overMidnight) {
+                    //jsem v ramci dne
+                    if(currentMaxValidityTime >= startNodeDeparture && currentMaxValidityTime < currentNodeTimeProperty) {
+                        //max validity je taky v ramci dne a uz prekonane
+                        return Iterables.empty();
+                    }
+                } else {
+                    //jsem uz pres pulnoc
+                    if(currentMaxValidityTime >= startNodeDeparture || currentMaxValidityTime < currentNodeTimeProperty) {
+                        return Iterables.empty();
+                    }
+                }
+            }
+
             //zjistim, jestli uz muzu na tento spoj prestoupit vzhledem k minimalnimu poctu minut na prestup
             final long thisStopArrival = stopTripWrapperOld.getThisStopArrival();
             final long tmpWithPenalty = thisStopArrival + DateTimeUtils.MIN_TRANSFER_SECONDS;
@@ -169,6 +188,21 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
                     return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_AWAITING_STOP);
                 }
             }
+
+            //pareto-optimalita
+            if(this.visitedStops.containsKey(currentNodeStopTimeId)) {
+                //a byl jsem na nem v pro me s priznivejsim casem vyjezdu
+                if(this.visitedStops.get(currentNodeStopTimeId) < travelTime) {
+                    if(currentMaxValidityTime == null) {
+                        long validityTime = inverseCurrentNodeTimeProperty + DateTimeUtils.MIN_TRANSFER_SECONDS;
+                        if(validityTime >= DateTimeUtils.SECONDS_IN_DAY) validityTime = validityTime - DateTimeUtils.SECONDS_IN_DAY;
+                        stopTripWrapper.setMaxValidityTime(validityTime);
+                    }
+                    return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_AWAITING_STOP);
+                }
+            }
+            //pokud to prislo sem, tak mam aktualne nejlepsi mozny
+            this.visitedStops.put(currentNodeStopTimeId, travelTime);
 
             //vytahnu si calendar pro tento trip a budu zjistovat, zda je trip platny v tomto dni
             final Relationship inTripRelationship = currentNode.getSingleRelationship(StopTimeNode.REL_IN_TRIP, Direction.OUTGOING);
@@ -186,6 +220,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             //posledni hrana byla next_stop, mimo jine to znamena, ze currentNodeArrival nemuze byt null
             assert(currentNodeArrival != null);
 
+            stopTripWrapper.setMaxValidityTime(null);
             stopTripWrapper.setThisStopArrival(currentNodeArrival);
             //v ramci teto path jsem na teto stanici jiz byl (tedy se vracim, coz je nezadouci)
             //ovsem v ramci jednoho tripu muzu na jednu stanici vicenasobne
