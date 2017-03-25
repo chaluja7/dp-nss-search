@@ -29,8 +29,6 @@ public class ConnectionSearcherTest {
 
     @Test
     public void testByDepartureSearch() throws Throwable {
-        db.execute("CALL cz.cvut.dp.nss.search.initCalendarDates()");
-
         DateTimeFormatter formatter = DateTimeFormat.forPattern(DateTimeUtils.DATE_TIME_PATTERN);
         DateTime departureDateTime = formatter.parseDateTime("02.02.2017 9:00");
         DateTime maxDepartureDateTime = formatter.parseDateTime("02.02.2017 11:00");
@@ -38,7 +36,7 @@ public class ConnectionSearcherTest {
         long departureMillis = departureDateTime.getMillis();
         long maxDepartureMillis = maxDepartureDateTime.getMillis();
 
-        Result result = db.execute("CALL cz.cvut.dp.nss.search.byDepartureSearch('Červeňanského', 'Na Strži', " + departureMillis + ", " + maxDepartureMillis + ", 2)");
+        Result result = db.execute("CALL cz.cvut.dp.nss.search.byDepartureSearch('Dejvická', 'Karlovo náměstí', " + departureMillis + ", " + maxDepartureMillis + ", 2, false)");
 
         List<Map<String, Object>> list = new ArrayList<>();
         while(result.hasNext()) {

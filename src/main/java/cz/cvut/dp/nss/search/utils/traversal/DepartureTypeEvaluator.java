@@ -18,11 +18,25 @@ import java.util.*;
  */
 public final class DepartureTypeEvaluator implements Evaluator {
 
+    /**
+     * jmeno cilove (hledane) stanice
+     */
     private final String endStopName;
 
+    /**
+     * cas vyhledavani od (ve vterinach daneho dne)
+     */
     private final int departureSecondsOfDay;
 
+    /**
+     * max pocet nalezenych vysledku - po nalezeni tohoto poctu muzeme vyhledavani ukoncit
+     */
     private final int maxNumberOfResults;
+
+    /**
+     * pokud true, tak hledam vysledky jen na bezbarierovych stanicich a tripech
+     */
+    private final boolean wheelChairAccessible;
 
     /**
      * identifikator stopTimeId (start cesty) -> cas, ve kterem jsem z klice jiz nasel cilovou stanici (scope je v ramci cesty)
@@ -39,10 +53,11 @@ public final class DepartureTypeEvaluator implements Evaluator {
      */
     private Long prevFoundedDeparture = null;
 
-    public DepartureTypeEvaluator(String endStopName, LocalDateTime departureDateTime, int maxNumberOfResults) {
+    public DepartureTypeEvaluator(String endStopName, LocalDateTime departureDateTime, int maxNumberOfResults, boolean wheelChairAccessible) {
         this.endStopName = endStopName;
         this.departureSecondsOfDay = departureDateTime.getMillisOfDay() / 1000;
         this.maxNumberOfResults = maxNumberOfResults;
+        this.wheelChairAccessible = wheelChairAccessible;
     }
 
     @Override
@@ -79,6 +94,21 @@ public final class DepartureTypeEvaluator implements Evaluator {
             if(!currentNode.hasProperty(StopTimeNode.ARRIVAL_PROPERTY)) throw new RuntimeException("arrival on target can not be null");
             Long currentNodeArrival = (Long) currentNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY);
 
+            //kontrola na bezbarierovost
+            if(wheelChairAccessible) {
+                //jestli neni nalezeny stopTime bezbarierovy, tak ho nemuzu pocitat do nalezenych vysledku
+                boolean stopTimeIsWheelChairAccessible = false;
+                if(currentNode.hasProperty(StopTimeNode.WHEEL_CHAIR_PROPERTY)) {
+                    stopTimeIsWheelChairAccessible = (Boolean) currentNode.getProperty(StopTimeNode.WHEEL_CHAIR_PROPERTY);
+                }
+
+                if(!stopTimeIsWheelChairAccessible) {
+                    //neni bezbarierovy, takze neni mozne ho pocitat do vysledku (nebylo by mozne vystoupit)
+                    //dovolim ale pokracovat ve vyhledavani dal, je mozne ze pristi zastavka na tripu bude na stejne stanici a bezbarierova
+                    return Evaluation.EXCLUDE_AND_CONTINUE;
+                }
+            }
+
             //do setu si ulozim vsechny jiz navstivene tripy po teto ceste
             final Set<String> tmpTrips = new HashSet<>();
             fillVisitedTrips(tmpTrips, path);
@@ -89,8 +119,6 @@ public final class DepartureTypeEvaluator implements Evaluator {
                 final long stopTimeId = entry.getKey();
                 final Set<String> visitedTrips = entry.getValue();
 
-                //TODO jakubchalupa - zde postupne mazu jiz nalezene cesty, ktere maji nejaky spolecny trip s aktualne nalezenou
-                //TODO nebo naopak. Nemuze teoreticky nastat, ze smazu skoro vsechny a zustane jen jedna?
                 //na aktualne nalezene ceste jsem jel alespon jednim stejnym tripem, jako na jiz drive nalezene ceste do cile
                 //musim se tedy rozhodnout, zda je lepsi ta jiz drive nalezena cesta, nebo ta aktualni, protoze nechci mit obe
                 if(!Collections.disjoint(tmpTrips, visitedTrips)) {

@@ -24,17 +24,40 @@ import java.util.Set;
  */
 public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
 
+    /**
+     * cas odjezdu
+     */
     private final LocalDateTime departureDateTime;
 
+    /**
+     * maximalni pocet prestupu
+     */
     private final int maxNumberOfTransfers;
 
+    /**
+     * den roku odjezdu
+     */
     private final int departureDayOfYear;
 
+    /**
+     * den roku maximalniho prijezdu
+     */
     private final int maxDepartureDayOfYear;
 
+    /**
+     * cas hledani od (vteriny daneho dne)
+     */
     private final int departureSecondsOfDay;
 
+    /**
+     * max cas hledani do (vteriny daneho dne)
+     */
     private final int maxDepartureSecondsOfDay;
+
+    /**
+     * pokud true tak hledam jen komplet bezbarierove spoje
+     */
+    private final boolean wheelChairAccessible;
 
     /**
      * calendarId -> calendarNode. Je to mapa s calendar pro zjistovani platnosti prochazenych uzlu
@@ -47,9 +70,10 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
     private final Map<Long, Long> visitedStops = new HashMap<>();
 
     public DepartureTypeExpander(final LocalDateTime departureDateTime, final LocalDateTime maxDepartureDateTime,
-                                 final int maxNumberOfTransfers, final Map<String, CalendarNode> calendarNodeMap) {
+                                 final int maxNumberOfTransfers, final boolean wheelChairAccessible, final Map<String, CalendarNode> calendarNodeMap) {
         this.departureDateTime = departureDateTime;
         this.maxNumberOfTransfers = maxNumberOfTransfers;
+        this.wheelChairAccessible = wheelChairAccessible;
         this.calendarNodeMap = calendarNodeMap;
 
         this.departureDayOfYear = departureDateTime.getDayOfYear();
@@ -85,6 +109,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
         final String currentTripId = (String) currentNode.getProperty(StopTimeNode.TRIP_PROPERTY);
         final String currentStopName = (String) currentNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
         final boolean currentStopIsOverMidnightInTrip = (boolean) currentNode.getProperty(StopTimeNode.OVER_MIDNIGHT_PROPERTY);
+        final boolean currentStopIsWheelChairAccessible = currentNode.hasProperty(StopTimeNode.WHEEL_CHAIR_PROPERTY) && (boolean) currentNode.getProperty(StopTimeNode.WHEEL_CHAIR_PROPERTY);
         final Relationship lastRelationShip = path.lastRelationship();
 
         //rozhodujici je departureTime pokud existuje, jinak arrival time
@@ -216,6 +241,10 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
                 return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_AWAITING_STOP);
             }
 
+            //pokud hledam jen bezbarierove spoje a aktualni stop neni bezbarierovy tak na nej nemuzu prestoupit
+            if(wheelChairAccessible && !currentStopIsWheelChairAccessible) {
+                return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_AWAITING_STOP);
+            }
         } else {
             //posledni hrana byla next_stop, mimo jine to znamena, ze currentNodeArrival nemuze byt null
             assert(currentNodeArrival != null);
@@ -282,6 +311,11 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
                     //iterovat chci jen maximalne pres 2 relace dozadu, vice nema smysl
                     break;
                 }
+            }
+
+            //pokud hledam jen bezbarierove spoje a aktualni stop neni bezbarierovy tak z neho nemuzu prestoupit
+            if(wheelChairAccessible && !currentStopIsWheelChairAccessible) {
+                return currentNode.getRelationships(Direction.OUTGOING, StopTimeNode.REL_NEXT_STOP);
             }
         }
 

@@ -23,6 +23,8 @@ public class StopTimeNode {
 
     public static final String OVER_MIDNIGHT_PROPERTY = "overMidnightDepartureInTrip";
 
+    public static final String WHEEL_CHAIR_PROPERTY = "wheelChair";
+
     public static final Label NODE_LABEL = () -> "StopTimeNode";
 
     public static final RelationshipType REL_NEXT_STOP = () -> "NEXT_STOP";
