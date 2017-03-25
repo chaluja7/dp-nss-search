@@ -49,11 +49,6 @@ public class ConnectionSearcher {
     private static final Map<String, CalendarNode> calendarNodeMap = new HashMap<>();
 
     /**
-     * max pocet vysledku vyhledavani
-     */
-    private static final int MAX_NUMBER_OF_RESULTS = 3;
-
-    /**
      * najde spojeni dle zadanych parametru
      * @param stopFromName stanize z
      * @param stopToName stanice d
@@ -61,12 +56,16 @@ public class ConnectionSearcher {
      * @param maxDeparture maximalni cas prijezdu
      * @param maxTransfers maximalni pocet prestupu
      * @param withWheelChair true pokud chci jen kompletne bezbarierove vysledky (tedy nastupni, prestupni a vystupni stanice + jizdy)
+     * @param stopToWheelChairAccessible pokud false, tak stopToName stanice (konecna) nemusi byt bezbarierova - je to pro ucely vyhledavani s prujezdnou stanici - hledani pres stanici, na ktere ale zustanu ve stejnem voze
+     * @param stopTimeIdToSearchFrom id stopTime, ze ktereho zacnu vyhledavat. Pokud je poskytnuto, tak se bude vyhledavat pouze z tohoto!!!
      * @return stream nalezenych vysledku - serazene a vyfiltrovane
      */
     @Procedure(name = "cz.cvut.dp.nss.search.byDepartureSearch", mode = READ)
     public Stream<SearchResultWrapper> byDepartureSearch(@Name("stopFromName") String stopFromName, @Name("stopToName") String stopToName,
                                                @Name("departure") long departure, @Name("maxDeparture") long maxDeparture,
-                                               @Name("maxTransfers") long maxTransfers, @Name("wheelChair") boolean withWheelChair) {
+                                               @Name("maxTransfers") long maxTransfers, @Name("maxNumberOfResults") long maxNumberOfResults,
+                                               @Name("wheelChair") boolean withWheelChair, @Name("stopToWheelChairAccessible") boolean stopToWheelChairAccessible,
+                                               @Name("stopTimeIdToSearchFrom") Long stopTimeIdToSearchFrom) {
 
         //pokud mame prazdnou mapu calendarNodeMap tak ji inicializujeme
         if(calendarNodeMap.isEmpty()) {
@@ -79,7 +78,7 @@ public class ConnectionSearcher {
         }
 
         //zjistim, jestli vubec existuje cilova stanice - pokud ne tak vracim prazdny vysledek hledani
-        if(!stopWithNameExists(stopToName, withWheelChair)) {
+        if(!stopWithNameExists(stopToName, stopToWheelChairAccessible)) {
             return new ArrayList<SearchResultWrapper>().stream();
         }
 
@@ -88,7 +87,7 @@ public class ConnectionSearcher {
 
         //najdu uzly ze kterych muzu vyrazit a jeste je zkontroluji na platnost calendar
         //vyhovujici pridavam do listu nodeList
-        final ResourceIterator<Node> startNodes = findStartNodesForDepartureTypePathFinding(stopFromName, departure, maxDeparture, withWheelChair);
+        final ResourceIterator<Node> startNodes = findStartNodesForDepartureTypePathFinding(stopFromName, departure, maxDeparture, withWheelChair, stopTimeIdToSearchFrom);
         final List<Node> nodeList = new ArrayList<>();
         while(startNodes.hasNext()) {
             Node next = startNodes.next();
@@ -114,7 +113,7 @@ public class ConnectionSearcher {
             .uniqueness(Uniqueness.NODE_PATH)
             .expand(new DepartureTypeExpander(departureDateTime, new LocalDateTime(maxDeparture),
                 (int) maxTransfers, withWheelChair, calendarNodeMap), getEmptyInitialBranchState())
-            .evaluator(new DepartureTypeEvaluator(stopToName, departureDateTime, MAX_NUMBER_OF_RESULTS, withWheelChair));
+            .evaluator(new DepartureTypeEvaluator(stopToName, departureDateTime, (int) maxNumberOfResults, stopToWheelChairAccessible));
 
         Map<String, SearchResultWrapper> ridesMap = new HashMap<>();
         int secondsOfDepartureDay = departureDateTime.getMillisOfDay() / 1000;
@@ -213,7 +212,7 @@ public class ConnectionSearcher {
 
         //vysledky vyhledavani dam do listu a vratim. momentalne tam jsou vysledky, ktere dale musi byt vyfiltrovany!
         List<SearchResultWrapper> searchResultWrappers = transformSearchResultWrapperMapToList(ridesMap);
-        List<SearchResultWrapper> toRet = sortAndFilterSearchResults(searchResultWrappers);
+        List<SearchResultWrapper> toRet = sortAndFilterSearchResults(searchResultWrappers, (int) maxNumberOfResults);
 
         return toRet.stream();
     }
@@ -262,16 +261,16 @@ public class ConnectionSearcher {
      * @param searchResultWrappers vysledky hledani k serazeni a filtrovani
      * @return serazene a vyfiltrovane vysledky hledani
      */
-    private static List<SearchResultWrapper> sortAndFilterSearchResults(List<SearchResultWrapper> searchResultWrappers) {
+    private static List<SearchResultWrapper> sortAndFilterSearchResults(List<SearchResultWrapper> searchResultWrappers, int maxNumberOfResults) {
         //seradim vysledky vlastnim algoritmem
         searchResultWrappers.sort(new SearchResultByDepartureDateComparator());
 
-        if(searchResultWrappers.size() <= MAX_NUMBER_OF_RESULTS) {
+        if(searchResultWrappers.size() <= maxNumberOfResults) {
             return searchResultWrappers;
         }
 
-        List<SearchResultWrapper> retList = new ArrayList<>(MAX_NUMBER_OF_RESULTS);
-        for(int i = 0; i < MAX_NUMBER_OF_RESULTS; i++) {
+        List<SearchResultWrapper> retList = new ArrayList<>(maxNumberOfResults);
+        for(int i = 0; i < maxNumberOfResults; i++) {
             retList.add(i, searchResultWrappers.get(i));
         }
 
@@ -300,9 +299,11 @@ public class ConnectionSearcher {
      * @param departureInMillis datum odjezdu
      * @param maxDateDepartureInMillis max datum odjezdu
      * @param withWheelChair pokud true tak hledam jen vychozi stopy, ktere jsou bezbarierove
+     * @param stopTimeIdToSearchFrom id stopTimu, ze ktereho zacnu vyhledavat. Pokud je uvedeno tak se vyhledava pouze z tohoto!!!
      * @return vychozi zastaveni (serazena)
      */
-    private ResourceIterator<Node> findStartNodesForDepartureTypePathFinding(String stopFromName, long departureInMillis, long maxDateDepartureInMillis, boolean withWheelChair) {
+    private ResourceIterator<Node> findStartNodesForDepartureTypePathFinding(String stopFromName, long departureInMillis,
+                                                                             long maxDateDepartureInMillis, boolean withWheelChair, Long stopTimeIdToSearchFrom) {
         LocalDateTime tempDateDeparture = new LocalDateTime(departureInMillis);
         LocalDateTime tempMaxDateDeparture = new LocalDateTime(maxDateDepartureInMillis);
 
@@ -312,23 +313,26 @@ public class ConnectionSearcher {
         params.put("maxDepartureTimeInSeconds", tempMaxDateDeparture.getMillisOfDay() / 1000);
 
         String queryString = "match (s:StopTimeNode {stopName: {stopFromName}})-[IN_TRIP]->(t:TripNode) where s.departureInSeconds is not null ";
-        if(tempMaxDateDeparture.getMillisOfDay() > tempDateDeparture.getMillisOfDay()) {
-            //neprehoupl jsem se pres pulnoc
-            queryString += "and s.departureInSeconds >= {departureTimeInSeconds} and s.departureInSeconds < {maxDepartureTimeInSeconds} ";
+        if(stopTimeIdToSearchFrom == null) {
+            if(tempMaxDateDeparture.getMillisOfDay() > tempDateDeparture.getMillisOfDay()) {
+                //neprehoupl jsem se pres pulnoc
+                queryString += "and s.departureInSeconds >= {departureTimeInSeconds} and s.departureInSeconds < {maxDepartureTimeInSeconds} ";
+            } else {
+                //prehoupl jsem se s rozsahem pres pulnoc
+                queryString += "and ((s.departureInSeconds >= {departureTimeInSeconds}) or (s.departureInSeconds < {maxDepartureTimeInSeconds})) ";
+            }
+
+            if(withWheelChair) {
+                queryString += "and s.wheelChair ";
+            }
         } else {
-            //prehoupl jsem se s rozsahem pres pulnoc
-            queryString += "and ((s.departureInSeconds >= {departureTimeInSeconds}) or (s.departureInSeconds < {maxDepartureTimeInSeconds})) ";
+            //hledam z jednoho konkretniho stopTimu, ani nemusim resit vozicek, protoze to je pouze prujezdni
+            params.put("stopTimeId", stopTimeIdToSearchFrom);
+            queryString += "and s.stopTimeId = {stopTimeId} ";
         }
 
-        if(withWheelChair) {
-            queryString += "and s.wheelChair ";
-        }
-
-        //pokud pouziju tohle, tak to pak neumi neo4j preves na Node
-//        queryString += "return s {.*, calendarId: t.calendarId} ";
         queryString += "return s ";
         queryString += "order by case when s.departureInSeconds < {departureTimeInSeconds} then 2 else 1 end, s.departureInSeconds asc";
-
 
         Result result = db.execute(queryString, params);
         return result.columnAs("s");

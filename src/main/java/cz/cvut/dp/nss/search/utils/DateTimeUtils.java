@@ -18,7 +18,7 @@ public class DateTimeUtils {
     public static final String DATE_TIME_PATTERN = "dd.MM.yyyy HH:mm";
 
     /**
-     * pocet milisekund za 24 hodin
+     * pocet sekund za 24 hodin
      */
     public static final int SECONDS_IN_DAY = 86400;
 
@@ -26,6 +26,11 @@ public class DateTimeUtils {
      * 2,5 minuty minimalne nutne na prestup
      */
     public static final int MIN_TRANSFER_SECONDS = 150;
+
+    /**
+     * 5 minut penalizace za prestup pro pareto optimalitu
+     */
+    public static final int TRANSFER_PENALTY_MILLIS = 300;
 
     /**
      * @param calendarNode calendarNode proti kteremu overuji platnost localDateTime

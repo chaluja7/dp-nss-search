@@ -36,7 +36,7 @@ public class ConnectionSearcherTest {
         long departureMillis = departureDateTime.getMillis();
         long maxDepartureMillis = maxDepartureDateTime.getMillis();
 
-        Result result = db.execute("CALL cz.cvut.dp.nss.search.byDepartureSearch('Dejvická', 'Karlovo náměstí', " + departureMillis + ", " + maxDepartureMillis + ", 2, false)");
+        Result result = db.execute("CALL cz.cvut.dp.nss.search.byDepartureSearch('Dejvická', 'Karlovo náměstí', " + departureMillis + ", " + maxDepartureMillis + ", 2, 3, false, false, 2563)");
 
         List<Map<String, Object>> list = new ArrayList<>();
         while(result.hasNext()) {

@@ -140,6 +140,8 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             //prehoupl jsem se pres pulnoc
             travelTime = DateTimeUtils.SECONDS_IN_DAY - startNodeDeparture + inverseCurrentNodeTimeProperty;
         }
+        //cas s penalizacemi za prestup pro pareto-optimalitu
+        final long travelTimeWithPenalty = travelTime + ((visitedTrips.size() - 1) * DateTimeUtils.TRANSFER_PENALTY_MILLIS);
 
         //Jsem na prvnim NODu
         if(lastRelationShip == null) {
@@ -217,7 +219,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             //pareto-optimalita
             if(this.visitedStops.containsKey(currentNodeStopTimeId)) {
                 //a byl jsem na nem v pro me s priznivejsim casem vyjezdu
-                if(this.visitedStops.get(currentNodeStopTimeId) < travelTime) {
+                if(this.visitedStops.get(currentNodeStopTimeId) < travelTimeWithPenalty) {
                     if(currentMaxValidityTime == null) {
                         long validityTime = inverseCurrentNodeTimeProperty + DateTimeUtils.MIN_TRANSFER_SECONDS;
                         if(validityTime >= DateTimeUtils.SECONDS_IN_DAY) validityTime = validityTime - DateTimeUtils.SECONDS_IN_DAY;
@@ -227,7 +229,7 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
                 }
             }
             //pokud to prislo sem, tak mam aktualne nejlepsi mozny
-            this.visitedStops.put(currentNodeStopTimeId, travelTime);
+            this.visitedStops.put(currentNodeStopTimeId, travelTimeWithPenalty);
 
             //vytahnu si calendar pro tento trip a budu zjistovat, zda je trip platny v tomto dni
             final Relationship inTripRelationship = currentNode.getSingleRelationship(StopTimeNode.REL_IN_TRIP, Direction.OUTGOING);
@@ -274,13 +276,13 @@ public class DepartureTypeExpander implements PathExpander<StopTripWrapper> {
             //pareto-optimalita
             if(this.visitedStops.containsKey(currentNodeStopTimeId)) {
                 //a byl jsem na nem v pro me s priznivejsim casem vyjezdu
-                if(this.visitedStops.get(currentNodeStopTimeId) < travelTime) {
+                if(this.visitedStops.get(currentNodeStopTimeId) < travelTimeWithPenalty) {
                     return Iterables.empty();
                 }
             }
 
             //pokud to prislo sem, tak mam aktualne nejlepsi mozny
-            this.visitedStops.put(currentNodeStopTimeId, travelTime);
+            this.visitedStops.put(currentNodeStopTimeId, travelTimeWithPenalty);
 
             int i = 0;
             RelationshipType prevRelationShipType = null;
