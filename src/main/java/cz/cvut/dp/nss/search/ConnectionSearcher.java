@@ -144,26 +144,18 @@ public class ConnectionSearcher {
             //vyberu tripy, po kterych jede cesta
             final Set<String> tripsOnPath = new LinkedHashSet<>();
             final List<Long> stopTimesOnPath = new ArrayList<>();
-            final List<String> stopTimesOnPathInfo = new ArrayList<>();
             RelationshipType prevRelationshipType = null;
             for(Relationship relationship : path.relationships()) {
                 final Node relationshipStartNode = relationship.getStartNode();
                 final long nodeStopTimeIdProperty = (long) relationshipStartNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
                 final String nodeTripIdProperty = (String) relationshipStartNode.getProperty(StopTimeNode.TRIP_PROPERTY);
 
-                final String nodeStopNameProperty = (String) relationshipStartNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
-                final Long nodeArrivalProperty = (Long) relationshipStartNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY);
-                final Long nodeDepartureProperty = (Long) relationshipStartNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
-
-
                 if(prevRelationshipType != null && prevRelationshipType.equals(StopTimeNode.REL_NEXT_STOP) && relationship.isType(StopTimeNode.REL_NEXT_AWAITING_STOP)) {
                     stopTimesOnPath.add(nodeStopTimeIdProperty);
-                    stopTimesOnPathInfo.add(getStopTimeInfoTmp(nodeStopNameProperty, nodeTripIdProperty, nodeArrivalProperty, nodeDepartureProperty));
                 }
 
                 if(relationship.isType(StopTimeNode.REL_NEXT_STOP) && !tripsOnPath.contains(nodeTripIdProperty)) {
                     stopTimesOnPath.add(nodeStopTimeIdProperty);
-                    stopTimesOnPathInfo.add(getStopTimeInfoTmp(nodeStopNameProperty, nodeTripIdProperty, nodeArrivalProperty, nodeDepartureProperty));
                     tripsOnPath.add(nodeTripIdProperty);
                 }
 
@@ -176,13 +168,8 @@ public class ConnectionSearcher {
 
             final long lastStopTimeId = (long) endNode.getProperty(StopTimeNode.STOP_TIME_ID_PROPERTY);
 
-            final String endNodeStopNameProperty = (String) endNode.getProperty(StopTimeNode.STOP_NAME_PROPERTY);
-            final String endNodeTripProperty = (String) endNode.getProperty(StopTimeNode.TRIP_PROPERTY);
-            final Long endNodeArrivalProperty = (Long) endNode.getProperty(StopTimeNode.ARRIVAL_PROPERTY);
-            final Long endNodeDepartureProperty = (Long) endNode.getProperty(StopTimeNode.DEPARTURE_PROPERTY);
             if(stopTimesOnPath.get(stopTimesOnPath.size() - 1) != lastStopTimeId) {
                 stopTimesOnPath.add(lastStopTimeId);
-                stopTimesOnPathInfo.add(getStopTimeInfoTmp(endNodeStopNameProperty, endNodeTripProperty, endNodeArrivalProperty, endNodeDepartureProperty));
             }
 
             StringBuilder stringBuilder = new StringBuilder();
@@ -202,8 +189,6 @@ public class ConnectionSearcher {
                 wrapper.setOverMidnightDeparture(overMidnightDeparture);
                 wrapper.setOverMidnightArrival(overMidnightArrival);
                 wrapper.setStops(stopTimesOnPath);
-                //TODO docasne jen pro debug
-                wrapper.setStopDetails(stopTimesOnPathInfo);
                 wrapper.setNumberOfTransfers(tripsOnPath.size() - 1);
                 ridesMap.put(pathIdentifier, wrapper);
             }
@@ -275,22 +260,6 @@ public class ConnectionSearcher {
         }
 
         return retList;
-    }
-
-    private static String getStopTimeInfoTmp(String stopName, String tripId, Long arrival, Long departure) {
-        arrival = arrival != null ? arrival * 1000 : 0L;
-        departure = departure != null ? departure * 1000 : 0L;
-
-
-        LocalDateTime arrivalDateTime = new LocalDateTime().withMillisOfDay(arrival.intValue());
-        LocalDateTime departureDateTime = new LocalDateTime().withMillisOfDay(departure.intValue());
-
-
-        StringBuilder builder = new StringBuilder();
-        builder.append("Stanice: ").append(stopName).append("; trip ID: ").append(tripId);
-        builder.append(" Příjezd: ").append(arrivalDateTime).append("; Odjezd: ").append(departureDateTime);
-
-        return builder.toString();
     }
 
     /**
