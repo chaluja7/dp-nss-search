@@ -10,6 +10,7 @@ import cz.cvut.dp.nss.search.utils.traversal.DepartureBranchSelector;
 import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeEvaluator;
 import cz.cvut.dp.nss.search.utils.traversal.DepartureTypeExpander;
 import cz.cvut.dp.nss.search.utils.traversal.wrapper.StopTripWrapper;
+import org.apache.commons.lang3.StringUtils;
 import org.joda.time.LocalDateTime;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.traversal.InitialBranchState;
@@ -75,6 +76,10 @@ public class ConnectionSearcher {
             if(calendarNodeMap.isEmpty()) {
                 return new ArrayList<SearchResultWrapper>().stream();
             }
+        }
+
+        if(StringUtils.isBlank(stopFromName) || StringUtils.isBlank(stopToName) || stopFromName.equalsIgnoreCase(stopToName)) {
+            return new ArrayList<SearchResultWrapper>().stream();
         }
 
         //zjistim, jestli vubec existuje cilova stanice - pokud ne tak vracim prazdny vysledek hledani
