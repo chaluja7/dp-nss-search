@@ -87,6 +87,9 @@ public class ConnectionSearcher {
             return new ArrayList<SearchResultWrapper>().stream();
         }
 
+        maxTransfers = getMaxNumberOfTransfers(maxTransfers);
+        maxNumberOfResults = getMaxNumberOfResults(maxNumberOfResults);
+
         final LocalDateTime departureDateTime = new LocalDateTime(departure);
         final int departureSecondsOfDay = departureDateTime.getMillisOfDay() / 1000;
 
@@ -205,6 +208,14 @@ public class ConnectionSearcher {
         List<SearchResultWrapper> toRet = sortAndFilterSearchResults(searchResultWrappers, (int) maxNumberOfResults);
 
         return toRet.stream();
+    }
+
+    private long getMaxNumberOfResults(long maxNumberOfResults) {
+        return maxNumberOfResults < 0 ? 3 : maxNumberOfResults > 10 ? 10 : maxNumberOfResults;
+    }
+
+    private long getMaxNumberOfTransfers(long maxNumberOfTransfers) {
+        return maxNumberOfTransfers < 0 ? 0 : maxNumberOfTransfers > 4 ? 4 : maxNumberOfTransfers;
     }
 
     @Procedure(name = "cz.cvut.dp.nss.search.initCalendarDates", mode = READ)
