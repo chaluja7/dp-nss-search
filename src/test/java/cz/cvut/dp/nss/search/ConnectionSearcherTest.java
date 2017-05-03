@@ -25,7 +25,7 @@ public class ConnectionSearcherTest {
     //public Neo4jRule neo4j = new Neo4jRule().withProcedure(ConnectionSearcher.class);
 
     private final GraphDatabaseService db = new GraphDatabaseFactory().
-        newEmbeddedDatabase(new File("/Users/jakubchalupa/Documents/FEL/MGR/DP/neo4j/neo4jPidTesting/data/databases/graph.db"));
+        newEmbeddedDatabase(new File("/Users/jakubchalupa/Documents/FEL/MGR/DP/neo4j/neo4jPid/data/databases/graph.db"));
 
     @Test
     public void testByDepartureSearch() throws Throwable {
@@ -43,6 +43,25 @@ public class ConnectionSearcherTest {
             list.add(result.next());
         }
 
+
+        int k = 0;
+    }
+
+    @Test
+    public void testByArrivalSearch() throws Throwable {
+        DateTimeFormatter formatter = DateTimeFormat.forPattern(DateTimeUtils.DATE_TIME_PATTERN);
+        DateTime arrivalDateTime = formatter.parseDateTime("03.05.2017 15:00");
+        DateTime minArrivalDateTime = formatter.parseDateTime("03.05.2017 09:00");
+
+        long arrivalMillis = arrivalDateTime.getMillis();
+        long minArrivalMillis = minArrivalDateTime.getMillis();
+
+        Result result = db.execute("CALL cz.cvut.dp.nss.search.byArrivalSearch('Dejvická', 'Karlovo náměstí', " + arrivalMillis + ", " + minArrivalMillis + ", 3, 3, false, false, null)");
+
+        List<Map<String, Object>> list = new ArrayList<>();
+        while(result.hasNext()) {
+            list.add(result.next());
+        }
 
         int k = 0;
     }

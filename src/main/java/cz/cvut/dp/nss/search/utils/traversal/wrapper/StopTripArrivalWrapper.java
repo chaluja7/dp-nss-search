@@ -9,9 +9,9 @@ import java.util.Set;
  * Wrapper to wrap stations for traversal purposes.
  *
  * @author jakubchalupa
- * @since 20.04.15 - 12.02.17
+ * @since 20.04.15 - 12.04.17
  */
-public class StopTripWrapper {
+public class StopTripArrivalWrapper {
 
     private Set<String> visitedTrips;
 
@@ -21,14 +21,14 @@ public class StopTripWrapper {
     private Map<String, Set<String>> visitedStops;
 
     /**
-     * cas prijezdu na aktualni stanici (pro zjisteni, jak dlouho uz na nic cekam na prestup)
+     * cas odjezdu z aktualni stanice (pro zjisteni, jak dlouho uz na nic cekam na prestup)
      */
-    private long thisStopArrival;
+    private long thisStopDeparture;
 
     /**
-     * maximalni cas, do ktereho muzu v dane vetvi iterovat. Pokud je prekrocen, neni mozne kamkoliv dale iterovat.
+     * minimalni cas, do ktereho muzu v dane vetvi iterovat. Pokud je prekrocen, neni mozne kamkoliv dale iterovat.
      */
-    private Long maxValidityTime;
+    private Long minValidityTime;
 
     public Set<String> getVisitedTrips() {
         if(visitedTrips == null) {
@@ -54,19 +54,19 @@ public class StopTripWrapper {
         this.visitedStops = visitedStops;
     }
 
-    public long getThisStopArrival() {
-        return thisStopArrival;
+    public long getThisStopDeparture() {
+        return thisStopDeparture;
     }
 
-    public void setThisStopArrival(long thisStopArrival) {
-        this.thisStopArrival = thisStopArrival;
+    public void setThisStopDeparture(long thisStopDeparture) {
+        this.thisStopDeparture = thisStopDeparture;
     }
 
-    public Long getMaxValidityTime() {
-        return maxValidityTime;
+    public Long getMinValidityTime() {
+        return minValidityTime;
     }
 
-    public void setMaxValidityTime(Long maxValidityTime) {
-        this.maxValidityTime = maxValidityTime;
+    public void setMinValidityTime(Long minValidityTime) {
+        this.minValidityTime = minValidityTime;
     }
 }
