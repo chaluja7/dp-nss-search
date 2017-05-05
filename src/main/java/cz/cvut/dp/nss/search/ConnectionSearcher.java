@@ -543,6 +543,11 @@ public class ConnectionSearcher {
         return resultList;
     }
 
+    /**
+     * prevede Node na CalendarNode
+     * @param node Node
+     * @return CalendarNode
+     */
     private static CalendarNode getCalendarNodeFromNode(Node node) {
         CalendarNode calendarNode = new CalendarNode();
         calendarNode.setCalendarId((String) node.getProperty(CalendarNode.CALENDAR_ID_PROPERTY));
@@ -559,6 +564,11 @@ public class ConnectionSearcher {
         return calendarNode;
     }
 
+    /**
+     * prevede Node na CalendarDateNode
+     * @param node Node
+     * @return CalendarDateNode
+     */
     private static CalendarDateNode getCalendarDateNodeFromNode(Node node) {
         CalendarDateNode calendarDateNode = new CalendarDateNode();
         calendarDateNode.setCalendarDateId((long) node.getProperty(CalendarDateNode.CALENDAR_DATE_ID_PROPERTY));

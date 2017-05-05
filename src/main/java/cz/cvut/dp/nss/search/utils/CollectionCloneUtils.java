@@ -13,10 +13,18 @@ import java.util.Set;
  */
 public class CollectionCloneUtils {
 
+    /**
+     * @param set set
+     * @return set deep copy
+     */
     public static Set<String> cloneSet(Set<String> set) {
         return new HashSet<>(set);
     }
 
+    /**
+     * @param map map
+     * @return map deep copy
+     */
     public static Map<String, Set<String>> cloneMap(Map<String, Set<String>> map) {
         final Map<String, Set<String>> clone = new HashMap<>(map.size());
         for(Map.Entry<String, Set<String>> entry : map.entrySet()) {
