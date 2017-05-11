@@ -4,6 +4,7 @@ import cz.cvut.dp.nss.search.utils.DateTimeUtils;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Result;
@@ -20,14 +21,11 @@ import java.util.Map;
  */
 public class ConnectionSearcherTest {
 
-    // This rule starts a Neo4j instance for us
-    //@Rule
-    //public Neo4jRule neo4j = new Neo4jRule().withProcedure(ConnectionSearcher.class);
-
     private final GraphDatabaseService db = new GraphDatabaseFactory().
         newEmbeddedDatabase(new File("/Users/jakubchalupa/Documents/FEL/MGR/DP/neo4j/neo4jPid/data/databases/graph.db"));
 
     @Test
+    @Ignore
     public void testByDepartureSearch() throws Throwable {
         DateTimeFormatter formatter = DateTimeFormat.forPattern(DateTimeUtils.DATE_TIME_PATTERN);
         DateTime departureDateTime = formatter.parseDateTime("02.02.2017 9:00");
@@ -42,12 +40,10 @@ public class ConnectionSearcherTest {
         while(result.hasNext()) {
             list.add(result.next());
         }
-
-
-        int k = 0;
     }
 
     @Test
+    @Ignore
     public void testByArrivalSearch() throws Throwable {
         DateTimeFormatter formatter = DateTimeFormat.forPattern(DateTimeUtils.DATE_TIME_PATTERN);
         DateTime arrivalDateTime = formatter.parseDateTime("03.05.2017 15:00");
@@ -62,11 +58,10 @@ public class ConnectionSearcherTest {
         while(result.hasNext()) {
             list.add(result.next());
         }
-
-        int k = 0;
     }
 
     @Test
+    @Ignore
     public void testInitCalendarDates() throws Throwable {
         db.execute("CALL cz.cvut.dp.nss.search.initCalendarDates()");
     }
